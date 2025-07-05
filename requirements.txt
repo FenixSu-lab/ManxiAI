@@ -1,0 +1,50 @@
+# Django核心框架
+Django==4.2.15
+djangorestframework==3.15.2
+django-cors-headers==4.3.1
+django-filter==23.2
+drf-yasg==1.21.7
+
+# 数据库
+psycopg2-binary==2.9.7
+django-extensions==3.2.3
+
+# AI和向量化
+langchain==0.2.7
+langchain-openai==0.1.13
+langchain-community==0.2.7
+sentence-transformers==2.2.2
+openai==1.30.5
+tiktoken==0.7.0
+
+# 向量数据库
+pgvector==0.2.2
+
+# 文档处理
+pypdf==4.2.0
+python-docx==0.8.11
+python-pptx==0.6.21
+openpyxl==3.1.2
+xlrd==2.0.1
+beautifulsoup4==4.12.2
+html2text==2020.1.16
+python-magic==0.4.27
+
+# 任务队列
+celery==5.3.1
+redis==4.6.0
+
+# 工具库
+jieba==0.42.1
+requests==2.31.0
+python-dotenv==1.0.0
+pillow==10.0.0
+pydantic==2.4.2
+uvicorn==0.23.2
+gunicorn==21.2.0
+
+# 开发工具
+pytest==7.4.2
+pytest-django==4.5.2
+black==23.7.0
+flake8==6.0.0 
