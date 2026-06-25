@@ -1,7 +1,10 @@
+﻿"""Embedding app configuration."""
 from django.apps import AppConfig
 
 
 class EmbeddingConfig(AppConfig):
+    """Register the embedding application."""
+
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'apps.embedding'
-    verbose_name = '向量化处理' 
+    verbose_name = 'Embedding'

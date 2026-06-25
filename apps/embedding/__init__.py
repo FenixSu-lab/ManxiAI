@@ -1,1 +1,1 @@
-# Embedding App - 向量化处理模块 
+﻿"""Embedding app package."""

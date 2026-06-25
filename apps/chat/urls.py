@@ -1,8 +1,24 @@
-"""
-对话管理URL配置
-"""
+﻿"""URL configuration for chat APIs."""
 from django.urls import path
 
+from .views import ChatSessionViewSet
+
+app_name = 'chat'
+
 urlpatterns = [
-    # TODO: 添加对话管理相关的URL
-] 
+    path('chat/sessions/', ChatSessionViewSet.as_view({
+        'get': 'list',
+        'post': 'create',
+    }), name='chat-session-list'),
+    path('chat/sessions/<uuid:pk>/', ChatSessionViewSet.as_view({
+        'get': 'retrieve',
+        'patch': 'partial_update',
+        'put': 'update',
+        'delete': 'destroy',
+    }), name='chat-session-detail'),
+    path('chat/sessions/<uuid:pk>/messages/', ChatSessionViewSet.as_view({
+        'get': 'messages',
+        'post': 'messages',
+        'delete': 'messages',
+    }), name='chat-session-messages'),
+]

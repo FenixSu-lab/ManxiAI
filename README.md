@@ -1,243 +1,179 @@
-# ManxiAI - 企业级AI知识库系统
+# ManxiAI
 
-ManxiAI是一个基于Django和RAG技术的企业级AI知识库系统，复刻自MaxKB的核心功能。
+ManxiAI is a Django + Vue knowledge-base application with PostgreSQL, pgvector, document ingestion, embeddings, vector retrieval, and RAG chat.
 
-## 🏗️ 项目架构
+## Current Capabilities
 
-```
-ManxiAI/
-├── config/                 # 项目配置
-│   ├── __init__.py
-│   ├── settings.py         # Django设置
-│   ├── urls.py             # URL配置
-│   ├── wsgi.py             # WSGI配置
-│   └── celery.py           # Celery配置
-├── apps/                   # 应用模块
-│   ├── core/               # 核心工具模块
-│   ├── users/              # 用户管理
-│   ├── knowledge_base/     # 知识库管理
-│   ├── document/           # 文档管理
-│   ├── chat/               # 对话管理
-│   ├── embedding/          # 向量化处理
-│   ├── pipeline/           # RAG管道
-│   ├── workflow/           # 工作流编排
-│   └── model_management/   # 模型管理
-├── requirements.txt        # 依赖包
-├── manage.py              # Django管理工具
-└── start.py               # 启动脚本
-```
+- User registration, login, profile update, teams, and API-key management.
+- Knowledge-base CRUD, document upload, web document creation, QA document creation, and document detail browsing.
+- Paragraph embedding storage in PostgreSQL with pgvector.
+- RAG chat sessions linked to a knowledge base.
+- Dashboard summary counters and runtime health display.
+- OpenAI-compatible embedding provider support, OpenAI/DeepSeek-compatible LLM support, and local debug providers for smoke tests.
+- Frontend built with Vue 3, TypeScript, Vite, Pinia, Element Plus.
 
-## 🗂️ 功能模块
+## Runtime Requirements
 
-![ManxiAI架构图](manxi_ai_arch.png)
+- Python 3.10+ recommended.
+- Node.js 18+ recommended.
+- PostgreSQL with the `vector` extension installed.
+- A reachable OpenAI-compatible embedding endpoint, or `hash_debug` for diagnostics only.
+- A DeepSeek/OpenAI-compatible chat model key for real LLM replies, or `debug` for diagnostics only.
 
-系统主要功能模块划分：
+## Backend Setup
 
-1. **用户管理**  
-   - 用户注册/登录/权限控制
-   - 团队管理
-   - API密钥管理
-
-2. **知识库管理**  
-   - 知识库CRUD
-   - 文档分类/标签
-   - 访问权限控制
-
-3. **文档处理**  
-   - 多格式文档上传
-   - 文档解析/分块
-   - 元数据提取
-
-4. **向量化处理**  
-   - 文本向量化
-   - 向量存储
-   - 相似度检索
-
-5. **对话管理**  
-   - 对话历史
-   - 上下文管理
-   - 多轮对话
-
-6. **RAG管道**  
-   - 检索增强生成
-   - 结果优化
-   - 缓存机制
-
-7. **模型管理**  
-   - 大模型接入
-   - 模型微调
-   - 推理服务
-
-
-## 🚀 快速开始
-
-### 1. 环境准备
-
-```bash
-# 创建虚拟环境
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# or
-venv\Scripts\activate     # Windows
-
-# 安装依赖
+```powershell
+cd D:\github\ManxiAI
+.\env\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
 
-### 2. 数据库配置
+Create PostgreSQL database and pgvector extension:
 
-```bash
-# 安装PostgreSQL和pgvector扩展
-# Ubuntu/Debian
-sudo apt-get install postgresql postgresql-contrib
-sudo apt-get install postgresql-14-pgvector
-
-# 创建数据库
-sudo -u postgres createdb manxiai
-
-# 启用pgvector扩展
-sudo -u postgres psql -d manxiai -c "CREATE EXTENSION vector;"
+```sql
+CREATE DATABASE manxiai;
+\c manxiai
+CREATE EXTENSION IF NOT EXISTS vector;
 ```
 
-### 3. 环境变量配置
-
-创建`.env`文件：
+Create `.env` from `env.example` and set real values:
 
 ```env
-# Django配置
-SECRET_KEY=your-secret-key-here
 DEBUG=True
+SECRET_KEY=change-me
 ALLOWED_HOSTS=localhost,127.0.0.1
 
-# 数据库配置
+USE_SQLITE=False
 DB_NAME=manxiai
 DB_USER=postgres
-DB_PASSWORD=postgres
-DB_HOST=localhost
+DB_PASSWORD=your-password
+DB_HOST=127.0.0.1
 DB_PORT=5432
+DB_CONN_MAX_AGE=60
+DB_CONNECT_TIMEOUT=10
+DB_GSSENCMODE=disable
+DB_SSLMODE=disable
+DB_APPLICATION_NAME=manxiai-django
 
-# OpenAI配置
-OPENAI_API_KEY=your-openai-api-key
-OPENAI_BASE_URL=https://api.openai.com/v1
+DEFAULT_LLM_PROVIDER=deepseek
+DEFAULT_LLM_MODEL=deepseek-chat
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+DEEPSEEK_API_KEY=your-deepseek-key
 
-# 向量化配置
-EMBEDDING_MODEL=text-embedding-ada-002
-EMBEDDING_DIMENSIONS=1536
+EMBEDDING_PROVIDER=http_openai_compatible
+EMBEDDING_MODEL=bge-large-zh-v1.5
+EMBEDDING_DIMENSIONS=1024
+EMBEDDING_API_URL=http://127.0.0.1:8884/v1/embeddings
+EMBEDDING_API_KEY=
 ```
 
-### 4. 初始化项目
+Run migrations and start Django:
 
-```bash
-# 数据库迁移
-python start.py migrate
-
-# 创建超级用户
-python start.py createsuperuser
-
-# 启动开发服务器
-python start.py runserver
+```powershell
+.\env\Scripts\python.exe manage.py migrate
+.\env\Scripts\python.exe manage.py runserver 127.0.0.1:8000
 ```
 
-### 5. 启动服务
+## Frontend Setup
 
-```bash
-# 启动Django服务器
-python start.py runserver 8000
-
-# 启动Celery worker（新终端）
-python start.py celery
+```powershell
+cd D:\github\ManxiAI\frontend
+npm install
+npm run dev
 ```
 
-## 📚 API文档
+The Vite dev server runs on `http://127.0.0.1:3000` and proxies `/api` to `http://127.0.0.1:8000`.
+Set `VITE_API_PROXY_TARGET` if you need the dev proxy to point at a different backend port.
 
-项目启动后，可以通过以下地址访问API文档：
+For the normal local workflow, prefer the deterministic restart script. It stops stale Django/Vite processes for this workspace, runs backend checks, starts both servers, and verifies the frontend proxy:
 
-- Swagger UI: http://localhost:8000/swagger/
-- ReDoc: http://localhost:8000/redoc/
+```powershell
+.\scripts\dev_restart.ps1
+```
 
-## 🔧 主要功能 + 任务排期
+From the frontend directory, the same flow is available as:
 
-### 第一阶段：核心RAG功能 (2-3周)
-- [x] 用户管理系统
-- [x] 知识库管理
-- [ ] 文档上传与处理， 文档管理模块 - 文档上传、解析、分块处理
-- [ ] 向量化处理模块 - 文本向量化、相似度搜索
-- [ ] 对话管理模块 - 聊天会话、消息历史
-- [ ] RAG管道模块 - 检索增强生成流程
+```powershell
+npm run dev:fullstack
+```
 
-### 第二阶段：增强功能
-- [ ] 文档解析（PDF、Word、PPT等）  OCR、表格提取、多语言
-- [ ] 智能分块与索引
-- [ ] 多模态检索 混合检索、重排序算法
-- [ ] 异步任务处理 文档处理、向量化任务
+## Verification Commands
 
-### 第三阶段：高级特性
-- [ ] 工作流编排  可视化设计、条件分支
-- [ ] 模型管理 多模型支持、性能监控
-- [ ] 权限控制
-- [ ] 监控与日志
+Run these after changing database, embedding, RAG, auth, or frontend integration code:
 
-## 📖 模块说明
+```powershell
+.\env\Scripts\python.exe manage.py check
+.\env\Scripts\python.exe manage.py makemigrations --check --dry-run
+.\env\Scripts\python.exe manage.py migrate --check
+.\env\Scripts\python.exe manage.py check_db_latency --warn-only --compare-client-modes
+.\env\Scripts\python.exe manage.py check_embedding_endpoint --warn-only
+.\env\Scripts\python.exe manage.py check_rag_stack
+.\env\Scripts\python.exe manage.py check_rag_stack --live
+.\env\Scripts\python.exe manage.py check_llm_stack
+.\env\Scripts\python.exe manage.py check_llm_stack --live
+.\env\Scripts\python.exe manage.py smoke_auth_flow
+.\env\Scripts\python.exe manage.py smoke_api_stack
+.\env\Scripts\python.exe manage.py smoke_api_stack --real-embedding --timeout 30
+```
 
-### 核心模块 (apps/core)
-- 提供基础模型类
-- 通用工具函数
-- 状态管理
+Frontend build check:
 
-### 用户管理 (apps/users)
-- 用户注册、登录、认证
-- 团队管理
-- API密钥管理
+```powershell
+cd frontend
+npm run build
+npm run smoke:fullstack
+```
 
-### 知识库管理 (apps/knowledge_base)
-- 知识库CRUD
-- 分享与权限
-- 标签管理
-- 配置管理
+Focused backend tests:
 
-### 文档管理 (apps/document)
-- 文档上传
-- 格式解析
-- 内容提取
-- 版本控制
+```powershell
+$env:USE_SQLITE='True'
+.\env\Scripts\python.exe -m pytest apps/chat/tests apps/document/tests apps/embedding/tests apps/model_management/tests apps/pipeline/tests -q
+```
 
-### 对话管理 (apps/chat)
-- 对话会话
-- 消息历史
-- 反馈评价
+## Provider Notes
 
-### 向量化处理 (apps/embedding)
-- 文本向量化
-- 向量存储
-- 相似度计算
+- `EMBEDDING_PROVIDER=http_openai_compatible` calls `EMBEDDING_API_URL` using the OpenAI `/embeddings` response shape.
+- `EMBEDDING_PROVIDER=openai` uses `OPENAI_BASE_URL + /embeddings` and requires a real `OPENAI_API_KEY` or `EMBEDDING_API_KEY`.
+- `EMBEDDING_PROVIDER=hash_debug` is deterministic and local, but it is only for tests and smoke checks.
+- `check_embedding_endpoint --warn-only` diagnoses the configured embedding service with TCP, health, and OpenAI-compatible POST checks.
+- `DEFAULT_LLM_PROVIDER=debug` is deterministic and local, useful for smoke tests without spending LLM tokens.
+- `DEFAULT_LLM_PROVIDER=deepseek` or `openai` is needed for real assistant answers.
+- `check_llm_stack --live` sends one minimal real chat request. Use it when validating production LLM credentials.
 
-### RAG管道 (apps/pipeline)
-- 检索增强生成
-- 多阶段处理
-- 结果排序
+## Authentication Notes
 
-## 🔍 技术栈
+- The SPA uses DRF token authentication, not Django session authentication.
+- Login and registration must work without a CSRF cookie when called from `http://localhost:3000`.
+- Run `.\env\Scripts\python.exe manage.py smoke_auth_flow` after changing auth, CORS, CSRF, or frontend proxy settings.
+- If a stale backend keeps returning old behavior, stop duplicate runserver processes before restarting:
 
-- **后端框架**: Django 4.2 + DRF
-- **数据库**: PostgreSQL + pgvector
-- **任务队列**: Celery + Redis
-- **AI框架**: LangChain
-- **向量化**: OpenAI Embeddings / Sentence Transformers
-- **文档处理**: PyPDF2, python-docx, openpyxl
-- **部署**: Docker + Gunicorn
+```powershell
+Get-CimInstance Win32_Process -Filter "name='python.exe'" |
+  Where-Object { $_.CommandLine -like '*manage.py runserver*' } |
+  ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+```
 
-## 🤝 贡献指南
+## Database Latency Notes
 
-1. Fork 本仓库
-2. 创建功能分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 打开 Pull Request
+- `GET /api/v1/health/` returns backend status and database query latency without authentication.
+- Run `.\env\Scripts\python.exe manage.py check_db_latency --warn-only --compare-client-modes` when the frontend reports backend timeouts after login.
+- If TCP latency is low but PostgreSQL handshake latency is high, first check `DB_GSSENCMODE=disable`. On Windows and local networks, default libpq GSS negotiation can add 15-20 seconds to the first PostgreSQL connection.
+- Keep `DB_SSLMODE=disable` for local PostgreSQL servers that do not use SSL. Use `require` or `verify-full` only when the server is configured for SSL.
+- Prefer `DB_HOST=127.0.0.1` only when PostgreSQL is actually listening locally and `pg_hba.conf` allows it. Otherwise use the reachable host and fix the handshake delay at the database layer.
 
-## 📄 许可证
+## Useful URLs
 
-本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情。
+- Frontend: `http://127.0.0.1:3000`
+- Backend API: `http://127.0.0.1:8000/api/v1/`
+- Health check: `http://127.0.0.1:8000/api/v1/health/`
+- Swagger: `http://127.0.0.1:8000/swagger/`
+- ReDoc: `http://127.0.0.1:8000/redoc/`
+- Django Admin: `http://127.0.0.1:8000/admin/`
 
-## 🙏 致谢
+## Development Conventions
 
-感谢 MaxKB 项目提供的架构参考和设计思路。
+- Add a file header comment/docstring for new files.
+- Add docstrings for functions and methods.
+- Log key inputs, outputs, IDs, and failure states around backend operations.
+- Do not commit `.env`, local databases, virtualenvs, build output, or runtime logs.

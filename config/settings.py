@@ -2,14 +2,39 @@
 Django settings for ManxiAI project.
 """
 import os
+import warnings
 from pathlib import Path
 from dotenv import load_dotenv
+
+warnings.filterwarnings(
+    'ignore',
+    message='pkg_resources is deprecated as an API.*',
+    category=UserWarning,
+)
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Load environment variables
 load_dotenv(BASE_DIR / '.env')
+
+
+def getenv_str(name: str, default: str = '') -> str:
+    """Return a stripped environment variable value with empty-string fallback."""
+    value = os.getenv(name)
+    if value is None:
+        return default
+    value = value.strip()
+    return value if value else default
+
+
+def getenv_int(name: str, default: int) -> int:
+    """Return an integer environment variable value with safe fallback."""
+    value = getenv_str(name, str(default))
+    try:
+        return int(value)
+    except ValueError:
+        return default
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-manxiai-development-key-change-in-production')
@@ -18,6 +43,15 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-manxiai-development-key-ch
 DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'
 
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip()
+    for origin in getenv_str(
+        'CSRF_TRUSTED_ORIGINS',
+        'http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173',
+    ).split(',')
+    if origin.strip()
+]
 
 # Application definition
 DJANGO_APPS = [
@@ -31,6 +65,7 @@ DJANGO_APPS = [
 
 THIRD_PARTY_APPS = [
     'rest_framework',
+    'rest_framework.authtoken',
     'corsheaders',
     'django_filters',
     'drf_yasg',
@@ -83,16 +118,37 @@ TEMPLATES = [
 WSGI_APPLICATION = 'config.wsgi.application'
 
 # Database
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.getenv('DB_NAME', 'manxiai'),
-        'USER': os.getenv('DB_USER', 'postgres'),
-        'PASSWORD': os.getenv('DB_PASSWORD', 'postgres'),
-        'HOST': os.getenv('DB_HOST', 'localhost'),
-        'PORT': os.getenv('DB_PORT', '5432'),
+USE_SQLITE = getenv_str('USE_SQLITE', 'False').lower() == 'true'
+
+if USE_SQLITE:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
     }
-}
+else:
+    DB_CONNECT_TIMEOUT = getenv_int('DB_CONNECT_TIMEOUT', 10)
+    DB_SSLMODE = getenv_str('DB_SSLMODE', 'disable')
+    DB_GSSENCMODE = getenv_str('DB_GSSENCMODE', 'disable')
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': getenv_str('DB_NAME', 'manxiai'),
+            'USER': getenv_str('DB_USER', 'postgres'),
+            'PASSWORD': getenv_str('DB_PASSWORD', ''),
+            'HOST': getenv_str('DB_HOST', '127.0.0.1'),
+            'PORT': getenv_str('DB_PORT', '5432'),
+            'CONN_MAX_AGE': getenv_int('DB_CONN_MAX_AGE', 60),
+            'CONN_HEALTH_CHECKS': True,
+            'OPTIONS': {
+                'connect_timeout': DB_CONNECT_TIMEOUT,
+                'sslmode': DB_SSLMODE,
+                'gssencmode': DB_GSSENCMODE,
+                'application_name': getenv_str('DB_APPLICATION_NAME', 'manxiai-django'),
+            },
+        }
+    }
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
@@ -137,7 +193,6 @@ AUTH_USER_MODEL = 'users.User'
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.TokenAuthentication',
-        'rest_framework.authentication.SessionAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
@@ -178,19 +233,33 @@ CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 
 # AI Model Configuration
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
-OPENAI_BASE_URL = os.getenv('OPENAI_BASE_URL', 'https://api.openai.com/v1')
+DEEPSEEK_API_KEY = getenv_str('DEEPSEEK_API_KEY', '')
+DEEPSEEK_BASE_URL = getenv_str('DEEPSEEK_BASE_URL', 'https://api.deepseek.com')
 
-# Embedding Configuration
-EMBEDDING_MODEL = os.getenv('EMBEDDING_MODEL', 'text-embedding-ada-002')
-EMBEDDING_DIMENSIONS = int(os.getenv('EMBEDDING_DIMENSIONS', '1536'))
+# 保持OpenAI作为备选
+OPENAI_API_KEY = getenv_str('OPENAI_API_KEY', '')
+OPENAI_BASE_URL = getenv_str('OPENAI_BASE_URL', 'https://api.openai.com/v1')
+
+# 默认使用DeepSeek
+DEFAULT_LLM_PROVIDER = getenv_str('DEFAULT_LLM_PROVIDER', 'deepseek')
+DEFAULT_LLM_MODEL = getenv_str('DEFAULT_LLM_MODEL', 'deepseek-chat')
+
+# Embedding configuration
+EMBEDDING_PROVIDER = getenv_str('EMBEDDING_PROVIDER', 'http_openai_compatible')
+EMBEDDING_MODEL = getenv_str('EMBEDDING_MODEL', 'bge-large-zh-v1.5')
+EMBEDDING_DIMENSIONS = int(os.getenv('EMBEDDING_DIMENSIONS', '1024'))
+EMBEDDING_API_URL = getenv_str('EMBEDDING_API_URL', '')
+EMBEDDING_API_KEY = getenv_str('EMBEDDING_API_KEY', '')
+EMBEDDING_REQUEST_TIMEOUT = int(os.getenv('EMBEDDING_REQUEST_TIMEOUT', '60'))
+EMBEDDING_BATCH_SIZE = int(os.getenv('EMBEDDING_BATCH_SIZE', '16'))
+RUN_BACKGROUND_TASKS_SYNC = getenv_str('RUN_BACKGROUND_TASKS_SYNC', 'False').lower() == 'true'
 
 # Vector Database Configuration
 VECTOR_DATABASE = {
     'ENGINE': 'pgvector',
     'TABLE_NAME': 'embeddings',
-    'SIMILARITY_THRESHOLD': float(os.getenv('SIMILARITY_THRESHOLD', '0.7')),
-    'TOP_K': int(os.getenv('TOP_K', '5')),
+    'SIMILARITY_THRESHOLD': float(getenv_str('SIMILARITY_THRESHOLD', '0.7')),
+    'TOP_K': int(getenv_str('TOP_K', '5')),
 }
 
 # File Upload Configuration
@@ -225,12 +294,12 @@ LOGGING = {
     'loggers': {
         'django': {
             'handlers': ['console', 'file'],
-            'level': os.getenv('DJANGO_LOG_LEVEL', 'INFO'),
+            'level': getenv_str('DJANGO_LOG_LEVEL', 'INFO'),
             'propagate': True,
         },
         'manxiai': {
             'handlers': ['console', 'file'],
-            'level': os.getenv('MANXIAI_LOG_LEVEL', 'INFO'),
+            'level': getenv_str('MANXIAI_LOG_LEVEL', 'INFO'),
             'propagate': True,
         },
     },

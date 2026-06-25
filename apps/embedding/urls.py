@@ -1,8 +1,6 @@
-"""
-向量化处理URL配置
-"""
+﻿"""URL configuration for embedding APIs."""
 from django.urls import path
 
 urlpatterns = [
-    # TODO: 添加向量化处理相关的URL
-] 
+    # Intentionally empty until embedding management endpoints are added.
+]

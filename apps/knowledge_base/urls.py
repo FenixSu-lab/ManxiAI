@@ -6,7 +6,7 @@ from rest_framework.routers import DefaultRouter
 from .views import KnowledgeBaseViewSet
 
 router = DefaultRouter()
-router.register(r'', KnowledgeBaseViewSet, basename='knowledge-base')
+router.register(r'knowledge-bases', KnowledgeBaseViewSet, basename='knowledge-bases')
 
 urlpatterns = [
     path('', include(router.urls)),

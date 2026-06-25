@@ -48,8 +48,8 @@ class KnowledgeBase(UserRelatedModel, SoftDeleteModel):
         from apps.document.models import Document
         documents = Document.objects.filter(knowledge_base=self, is_deleted=False)
         self.documents_count = documents.count()
-        self.chunks_count = sum(doc.chunks_count for doc in documents)
-        self.total_size = sum(doc.file_size for doc in documents)
+        self.chunks_count = sum(doc.paragraph_count for doc in documents)
+        self.total_size = sum(doc.file_size or 0 for doc in documents)
         self.save()
 
 
