@@ -59,11 +59,25 @@
           <el-table-column label="Updated" width="180">
             <template #default="{ row }">{{ formatTime(row.updated_at || row.created_at) }}</template>
           </el-table-column>
-          <el-table-column label="Actions" width="230" fixed="right">
+          <el-table-column label="Actions" width="190" fixed="right" align="center">
             <template #default="{ row }">
-              <el-button text type="primary" @click="openDocument(row)">View</el-button>
-              <el-button v-if="canWrite" text @click="reprocess(row)">Reprocess</el-button>
-              <el-button v-if="canWrite" text type="danger" @click="removeDocument(row)">Delete</el-button>
+              <div class="table-action-group">
+                <el-tooltip content="查看详情" placement="top">
+                  <el-button class="action-button" type="primary" plain circle @click="openDocument(row)">
+                    <el-icon><View /></el-icon>
+                  </el-button>
+                </el-tooltip>
+                <el-tooltip v-if="canWrite" content="重新处理" placement="top">
+                  <el-button class="action-button" plain circle @click="reprocess(row)">
+                    <el-icon><RefreshRight /></el-icon>
+                  </el-button>
+                </el-tooltip>
+                <el-tooltip v-if="canWrite" content="删除数据源" placement="top">
+                  <el-button class="action-button action-button--danger" type="danger" plain circle @click="removeDocument(row)">
+                    <el-icon><Delete /></el-icon>
+                  </el-button>
+                </el-tooltip>
+              </div>
             </template>
           </el-table-column>
         </el-table>
@@ -73,23 +87,23 @@
         <template #header>
           <div class="card-header">
             <div>
-              <h2>Permissions</h2>
-              <p v-if="knowledgeBase?.is_public">This knowledge base is open, so all signed-in users already have read access. Add users here only when they need write access.</p>
-              <p v-else>Grant read or write access to users in this system.</p>
+              <h2>权限配置</h2>
+              <p v-if="knowledgeBase?.is_public">当前知识库是开放的，所有登录用户都已有读取权限。这里只需要给特定用户增加写入权限。</p>
+              <p v-else>为系统内用户授予读取或写入权限。</p>
             </div>
-            <el-button @click="loadShares" :loading="sharesLoading"><el-icon><Refresh /></el-icon>Refresh</el-button>
+            <el-button @click="loadShares" :loading="sharesLoading"><el-icon><Refresh /></el-icon>刷新</el-button>
           </div>
         </template>
 
         <el-form class="share-form" inline @submit.prevent>
-          <el-form-item label="User">
+          <el-form-item label="用户">
             <el-select
               v-model="shareForm.user_email"
               filterable
               remote
               clearable
               reserve-keyword
-              placeholder="Search users"
+              placeholder="搜索系统用户"
               :remote-method="searchUserOptions"
               :loading="usersLoading"
               style="width: 280px"
@@ -97,29 +111,171 @@
               <el-option v-for="user in userOptions" :key="user.id" :label="user.label" :value="user.email" />
             </el-select>
           </el-form-item>
-          <el-form-item label="Permission">
+          <el-form-item label="权限">
             <el-select v-model="shareForm.permission" style="width: 140px">
-              <el-option label="Read" value="read" />
-              <el-option label="Write" value="write" />
+              <el-option label="读取" value="read" />
+              <el-option label="写入" value="write" />
             </el-select>
           </el-form-item>
           <el-form-item>
-            <el-button type="primary" :loading="sharing" @click="saveShare">Add / Update</el-button>
+            <el-button type="primary" :loading="sharing" @click="saveShare">添加 / 更新</el-button>
           </el-form-item>
         </el-form>
 
-        <el-table :data="shares" row-key="id" empty-text="No assigned users">
-          <el-table-column prop="shared_with_email" label="User" min-width="240" />
-          <el-table-column prop="permission" label="Permission" width="140">
-            <template #default="{ row }"><el-tag :type="row.permission === 'write' ? 'warning' : 'info'">{{ row.permission }}</el-tag></template>
+        <el-table :data="shares" row-key="id" empty-text="暂无指定用户权限">
+          <el-table-column prop="shared_with_email" label="用户" min-width="240" />
+          <el-table-column label="权限" width="140">
+            <template #default="{ row }"><el-tag :type="row.permission === 'write' ? 'warning' : 'info'">{{ row.permission === 'write' ? '写入' : '读取' }}</el-tag></template>
           </el-table-column>
-          <el-table-column label="Actions" width="120">
+          <el-table-column label="操作" width="110" align="center">
             <template #default="{ row }">
-              <el-button text type="danger" @click="removeShare(row)">Remove</el-button>
+              <div class="table-action-group">
+                <el-tooltip content="移除权限" placement="top">
+                  <el-button class="action-button action-button--danger" type="danger" plain circle @click="removeShare(row)">
+                    <el-icon><Delete /></el-icon>
+                  </el-button>
+                </el-tooltip>
+              </div>
             </template>
           </el-table-column>
         </el-table>
       </el-card>
+
+      <el-card v-if="canManage" class="mcp-card" shadow="never">
+        <template #header>
+          <div class="card-header">
+            <div>
+              <h2>MCP 导出</h2>
+              <p>将当前知识库发布为 Hosted MCP Server，供外部智能体调用。访问令牌只会显示一次。</p>
+            </div>
+            <div class="document-actions">
+              <el-button @click="loadMcpProfiles" :loading="mcpLoading"><el-icon><Refresh /></el-icon>刷新</el-button>
+              <el-button type="primary" @click="showMcpDialog = true">新建 MCP 配置</el-button>
+            </div>
+          </div>
+        </template>
+
+        <el-alert
+          v-if="newMcpToken"
+          type="warning"
+          show-icon
+          :closable="false"
+          class="token-alert"
+          title="请立即复制这个令牌。关闭后系统不会再次明文显示。"
+        >
+          <template #default>
+            <div class="token-row">
+              <code>{{ newMcpToken }}</code>
+              <el-button size="small" @click="copyText(newMcpToken)">复制令牌</el-button>
+            </div>
+          </template>
+        </el-alert>
+
+        <el-table v-loading="mcpLoading" :data="mcpProfiles" row-key="id" empty-text="暂无 MCP 配置">
+          <el-table-column prop="name" label="名称" min-width="180" />
+          <el-table-column label="访问地址" min-width="280" show-overflow-tooltip>
+            <template #default="{ row }">
+              <span>{{ row.endpoint_url }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="权限范围" width="150">
+            <template #default="{ row }">{{ getMcpScopeLabel(row.permission_scope) }}</template>
+          </el-table-column>
+          <el-table-column label="状态" width="110">
+            <template #default="{ row }"><el-tag :type="row.is_active ? 'success' : 'info'">{{ row.is_active ? '启用' : '停用' }}</el-tag></template>
+          </el-table-column>
+          <el-table-column prop="usage_count" label="调用次数" width="100" />
+          <el-table-column label="操作" width="260" fixed="right" align="center">
+            <template #default="{ row }">
+              <div class="table-action-group">
+                <el-tooltip content="复制配置" placement="top">
+                  <el-button class="action-button" type="primary" plain circle @click="copyMcpConfig(row)">
+                    <el-icon><CopyDocument /></el-icon>
+                  </el-button>
+                </el-tooltip>
+                <el-tooltip content="访问日志" placement="top">
+                  <el-button class="action-button" plain circle @click="openMcpLogs(row)">
+                    <el-icon><Tickets /></el-icon>
+                  </el-button>
+                </el-tooltip>
+                <el-tooltip :content="row.is_active ? '停用配置' : '启用配置'" placement="top">
+                  <el-button class="action-button" :type="row.is_active ? 'warning' : 'success'" plain circle @click="toggleMcpProfile(row)">
+                    <el-icon><SwitchButton /></el-icon>
+                  </el-button>
+                </el-tooltip>
+                <el-tooltip content="轮换令牌" placement="top">
+                  <el-button class="action-button" plain circle @click="rotateMcpToken(row)">
+                    <el-icon><Key /></el-icon>
+                  </el-button>
+                </el-tooltip>
+                <el-tooltip content="删除配置" placement="top">
+                  <el-button class="action-button action-button--danger" type="danger" plain circle @click="deleteMcp(row)">
+                    <el-icon><Delete /></el-icon>
+                  </el-button>
+                </el-tooltip>
+              </div>
+            </template>
+          </el-table-column>
+        </el-table>
+      </el-card>
+
+      <el-dialog v-model="showMcpDialog" title="新建 MCP 配置" width="620px">
+        <el-form :model="mcpForm" label-position="top">
+          <el-form-item label="名称">
+            <el-input v-model="mcpForm.name" placeholder="例如：外部智能体 MCP" />
+          </el-form-item>
+          <el-form-item label="权限范围">
+            <el-select v-model="mcpForm.permission_scope" style="width: 100%">
+              <el-option label="只读工具" value="read_only" />
+              <el-option label="检索并返回引用" value="citations_only" />
+              <el-option label="仅检索" value="search_only" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="允许调用的工具">
+            <el-checkbox-group v-model="mcpForm.allowed_tools">
+              <el-checkbox label="search_knowledge" :disabled="!isMcpToolAllowed('search_knowledge')">检索知识库</el-checkbox>
+              <el-checkbox label="list_sources" :disabled="!isMcpToolAllowed('list_sources')">列出数据源</el-checkbox>
+              <el-checkbox label="get_document" :disabled="!isMcpToolAllowed('get_document')">读取文档</el-checkbox>
+              <el-checkbox label="get_paragraph" :disabled="!isMcpToolAllowed('get_paragraph')">读取分段</el-checkbox>
+              <el-checkbox label="answer_with_citations" :disabled="!isMcpToolAllowed('answer_with_citations')">带引用回答</el-checkbox>
+            </el-checkbox-group>
+          </el-form-item>
+          <div class="form-grid">
+            <el-form-item label="最大召回数量">
+              <el-input-number v-model="mcpForm.max_top_k" :min="1" :max="20" />
+            </el-form-item>
+            <el-form-item label="每分钟限流">
+              <el-input-number v-model="mcpForm.rate_limit_per_minute" :min="1" :max="1000" />
+            </el-form-item>
+          </div>
+          <div class="form-grid">
+            <el-form-item label="返回原文内容">
+              <el-switch v-model="mcpForm.include_source_content" />
+            </el-form-item>
+            <el-form-item label="返回元数据">
+              <el-switch v-model="mcpForm.include_metadata" />
+            </el-form-item>
+          </div>
+        </el-form>
+        <template #footer>
+          <el-button @click="showMcpDialog = false">取消</el-button>
+          <el-button type="primary" :loading="mcpSaving" @click="createMcp">创建</el-button>
+        </template>
+      </el-dialog>
+
+      <el-dialog v-model="showMcpLogsDialog" title="MCP 访问日志" width="880px">
+        <el-table v-loading="mcpLogsLoading" :data="mcpLogs" row-key="id" empty-text="暂无访问日志" max-height="420">
+          <el-table-column prop="method" label="方法" width="150" />
+          <el-table-column prop="tool_name" label="工具" width="160" />
+          <el-table-column prop="status" label="状态" width="100" />
+          <el-table-column prop="result_count" label="结果数" width="90" />
+          <el-table-column prop="latency_ms" label="耗时 ms" width="110" />
+          <el-table-column prop="query" label="查询内容" min-width="180" show-overflow-tooltip />
+          <el-table-column prop="created_at" label="创建时间" width="180">
+            <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
+          </el-table-column>
+        </el-table>
+      </el-dialog>
 
       <DocumentUploadDialog v-model="showUploadDialog" :knowledge-base-id="knowledgeBaseId" @success="handleDocumentChanged" />
       <QADocumentDialog v-model="showQADialog" :knowledge-base-id="knowledgeBaseId" @success="handleDocumentChanged" />
@@ -130,24 +286,44 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, ChatDotRound, EditPen, Link, Refresh, Upload } from '@element-plus/icons-vue'
+import {
+  ArrowLeft,
+  ChatDotRound,
+  CopyDocument,
+  Delete,
+  EditPen,
+  Key,
+  Link,
+  Refresh,
+  RefreshRight,
+  SwitchButton,
+  Tickets,
+  Upload,
+  View
+} from '@element-plus/icons-vue'
 import Layout from '@/components/Layout.vue'
 import DocumentDetailDialog from '@/components/document/DocumentDetailDialog.vue'
 import DocumentUploadDialog from '@/components/document/DocumentUploadDialog.vue'
 import QADocumentDialog from '@/components/document/QADocumentDialog.vue'
 import WebDocumentDialog from '@/components/document/WebDocumentDialog.vue'
 import {
+  createMcpProfile,
   deleteDocument,
+  deleteMcpProfile,
   getDocuments,
   getKnowledgeBase,
   getKnowledgeBaseShares,
+  getMcpProfileLogs,
+  getMcpProfiles,
   reprocessDocument,
+  rotateMcpProfileToken,
   searchUsers,
   shareKnowledgeBase,
   unshareKnowledgeBase,
+  updateMcpProfile,
   updateKnowledgeBaseStats
 } from '@/api/knowledge-base'
 import { getApiErrorMessage } from '@/utils/api'
@@ -195,6 +371,32 @@ interface UserOptionDto {
   label: string
 }
 
+interface McpProfileDto {
+  id: string
+  name: string
+  endpoint_url: string
+  permission_scope: string
+  allowed_tools: string[]
+  is_active: boolean
+  rate_limit_per_minute: number
+  max_top_k: number
+  include_source_content: boolean
+  include_metadata: boolean
+  usage_count: number
+  token?: string
+}
+
+interface McpLogDto {
+  id: string
+  method: string
+  tool_name: string
+  query: string
+  status: string
+  latency_ms: number
+  result_count: number
+  created_at?: string
+}
+
 const route = useRoute()
 const router = useRouter()
 const knowledgeBaseId = computed(() => String(route.params.id))
@@ -203,15 +405,37 @@ const documents = ref<DocumentDto[]>([])
 const selectedDocument = ref<DocumentDto | null>(null)
 const shares = ref<ShareDto[]>([])
 const userOptions = ref<UserOptionDto[]>([])
+const mcpProfiles = ref<McpProfileDto[]>([])
+const mcpLogs = ref<McpLogDto[]>([])
 const loading = ref(false)
 const sharesLoading = ref(false)
 const usersLoading = ref(false)
 const sharing = ref(false)
+const mcpLoading = ref(false)
+const mcpSaving = ref(false)
+const mcpLogsLoading = ref(false)
 const showUploadDialog = ref(false)
 const showQADialog = ref(false)
 const showWebDialog = ref(false)
 const showDetailDialog = ref(false)
+const showMcpDialog = ref(false)
+const showMcpLogsDialog = ref(false)
+const newMcpToken = ref('')
 const shareForm = ref({ user_email: '', permission: 'read' as 'read' | 'write' })
+const mcpForm = ref({
+  name: '',
+  permission_scope: 'read_only',
+  allowed_tools: ['search_knowledge', 'list_sources', 'get_document', 'get_paragraph'],
+  rate_limit_per_minute: 60,
+  max_top_k: 5,
+  include_source_content: true,
+  include_metadata: true
+})
+const mcpScopeTools: Record<string, string[]> = {
+  search_only: ['search_knowledge'],
+  citations_only: ['search_knowledge', 'list_sources', 'answer_with_citations'],
+  read_only: ['search_knowledge', 'list_sources', 'get_document', 'get_paragraph', 'answer_with_citations']
+}
 
 const canWrite = computed(() => Boolean(knowledgeBase.value?.can_write))
 const canManage = computed(() => Boolean(knowledgeBase.value?.can_manage))
@@ -227,11 +451,127 @@ const loadData = async () => {
     ])
     knowledgeBase.value = kbResponse.data
     documents.value = docsResponse.data.results || docsResponse.data || []
-    if (knowledgeBase.value?.can_manage) await loadShares()
+    if (knowledgeBase.value?.can_manage) {
+      await Promise.all([loadShares(), loadMcpProfiles()])
+    }
   } catch (error) {
     ElMessage.error(getApiErrorMessage(error, 'Failed to load knowledge base details'))
   } finally {
     loading.value = false
+  }
+}
+
+const loadMcpProfiles = async () => {
+  if (!canManage.value) return
+  mcpLoading.value = true
+  try {
+    const response = await getMcpProfiles(knowledgeBaseId.value)
+    mcpProfiles.value = response.data.results || response.data || []
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '加载 MCP 配置失败'))
+  } finally {
+    mcpLoading.value = false
+  }
+}
+
+const createMcp = async () => {
+  if (!mcpForm.value.name.trim()) {
+    ElMessage.error('请输入 MCP 配置名称')
+    return
+  }
+  mcpSaving.value = true
+  try {
+    const response = await createMcpProfile(knowledgeBaseId.value, mcpForm.value)
+    newMcpToken.value = response.data.token
+    showMcpDialog.value = false
+    mcpForm.value = {
+      name: '',
+      permission_scope: 'read_only',
+      allowed_tools: ['search_knowledge', 'list_sources', 'get_document', 'get_paragraph'],
+      rate_limit_per_minute: 60,
+      max_top_k: 5,
+      include_source_content: true,
+      include_metadata: true
+    }
+    ElMessage.success('MCP 配置已创建')
+    await loadMcpProfiles()
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '创建 MCP 配置失败'))
+  } finally {
+    mcpSaving.value = false
+  }
+}
+
+const toggleMcpProfile = async (profile: McpProfileDto) => {
+  try {
+    await updateMcpProfile(knowledgeBaseId.value, profile.id, { is_active: !profile.is_active })
+    ElMessage.success(profile.is_active ? 'MCP 配置已停用' : 'MCP 配置已启用')
+    await loadMcpProfiles()
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '更新 MCP 配置失败'))
+  }
+}
+
+const rotateMcpToken = async (profile: McpProfileDto) => {
+  try {
+    const response = await rotateMcpProfileToken(knowledgeBaseId.value, profile.id)
+    newMcpToken.value = response.data.token
+    ElMessage.success('MCP 令牌已轮换')
+    await loadMcpProfiles()
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '轮换 MCP 令牌失败'))
+  }
+}
+
+const deleteMcp = async (profile: McpProfileDto) => {
+  try {
+    await ElMessageBox.confirm(`确认删除 MCP 配置“${profile.name}”？`, '确认删除', { type: 'warning' })
+    await deleteMcpProfile(knowledgeBaseId.value, profile.id)
+    ElMessage.success('MCP 配置已删除')
+    await loadMcpProfiles()
+  } catch (error) {
+    if (error !== 'cancel') ElMessage.error(getApiErrorMessage(error, '删除 MCP 配置失败'))
+  }
+}
+
+const isMcpToolAllowed = (tool: string) => {
+  return (mcpScopeTools[mcpForm.value.permission_scope] || mcpScopeTools.read_only).includes(tool)
+}
+
+const copyMcpConfig = async (profile: McpProfileDto) => {
+  await copyText(JSON.stringify({
+    name: profile.name,
+    url: profile.endpoint_url,
+    authorization: 'Bearer <paste-token-here>',
+    protocol: 'mcp-streamable-http'
+  }, null, 2))
+}
+
+const getMcpScopeLabel = (scope: string) => ({
+  read_only: '只读工具',
+  citations_only: '检索引用',
+  search_only: '仅检索'
+}[scope] || scope)
+
+const openMcpLogs = async (profile: McpProfileDto) => {
+  showMcpLogsDialog.value = true
+  mcpLogsLoading.value = true
+  try {
+    const response = await getMcpProfileLogs(knowledgeBaseId.value, profile.id)
+    mcpLogs.value = response.data.results || response.data || []
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '加载 MCP 日志失败'))
+  } finally {
+    mcpLogsLoading.value = false
+  }
+}
+
+const copyText = async (value: string) => {
+  try {
+    await navigator.clipboard.writeText(value)
+    ElMessage.success('已复制')
+  } catch (error) {
+    ElMessage.error('复制失败')
   }
 }
 
@@ -350,6 +690,14 @@ const formatTime = (value?: string) => value ? new Date(value).toLocaleString() 
 onMounted(() => {
   void loadData()
 })
+
+watch(() => mcpForm.value.permission_scope, (scope) => {
+  const allowed = new Set(mcpScopeTools[scope] || mcpScopeTools.read_only)
+  mcpForm.value.allowed_tools = mcpForm.value.allowed_tools.filter((tool) => allowed.has(tool))
+  if (mcpForm.value.allowed_tools.length === 0) {
+    mcpForm.value.allowed_tools = [mcpScopeTools[scope]?.[0] || 'search_knowledge']
+  }
+})
 </script>
 
 <style scoped lang="scss">
@@ -365,14 +713,45 @@ onMounted(() => {
 .summary-item span { color: #6b7280; font-size: 13px; }
 .summary-item strong { color: #111827; font-size: 22px; }
 .documents-card,
-.permissions-card { border-radius: 8px; margin-bottom: 16px; }
-.permissions-card { margin-top: 16px; }
+.permissions-card,
+.mcp-card { border-radius: 8px; margin-bottom: 16px; }
+.permissions-card,
+.mcp-card { margin-top: 16px; }
 .card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .card-header h2 { margin: 0 0 4px; font-size: 18px; color: #111827; }
 .card-header p { margin: 0; color: #6b7280; font-size: 13px; }
 .share-form { margin-bottom: 12px; }
+.token-alert { margin-bottom: 14px; }
+.token-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.token-row code { word-break: break-all; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .status-cell { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 .status-error { max-width: 190px; color: #dc2626; font-size: 12px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: help; }
+.table-action-group {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+  background: #f8fafc;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+}
+.table-action-group :deep(.el-button + .el-button) { margin-left: 0; }
+.action-button {
+  width: 30px;
+  height: 30px;
+  min-height: 30px;
+  transition: transform 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
+}
+.action-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.12);
+}
+.action-button--danger:hover {
+  box-shadow: 0 6px 14px rgba(220, 38, 38, 0.16);
+}
 @media (max-width: 768px) {
   .page-header,
   .card-header {
@@ -381,6 +760,9 @@ onMounted(() => {
   .header-actions,
   .document-actions {
     justify-content: flex-start;
+  }
+  .form-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

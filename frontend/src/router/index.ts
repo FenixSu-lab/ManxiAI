@@ -55,6 +55,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/share/chat/:token',
+      name: 'PublicChatShare',
+      component: () => import('@/views/chat/PublicShare.vue'),
+      meta: { requiresAuth: false, allowAuthenticated: true }
+    },
+    {
       path: '/settings',
       name: 'Settings',
       component: () => import('@/views/settings/Index.vue'),
@@ -91,7 +97,7 @@ router.beforeEach(async (to, _from, next) => {
 
   if (requiresAuth && !authStore.isAuthenticated) {
     next('/login')
-  } else if (!requiresAuth && authStore.isAuthenticated) {
+  } else if (!requiresAuth && authStore.isAuthenticated && !to.meta.allowAuthenticated) {
     next('/dashboard')
   } else {
     next()

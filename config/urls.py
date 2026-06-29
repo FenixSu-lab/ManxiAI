@@ -15,6 +15,7 @@ warnings.filterwarnings(
 )
 from drf_yasg import openapi  # noqa: E402
 from drf_yasg.views import get_schema_view  # noqa: E402
+from apps.mcp_server.views import mcp_endpoint  # noqa: E402
 
 schema_view = get_schema_view(
     openapi.Info(
@@ -40,6 +41,8 @@ urlpatterns = [
     path('api/v1/', include('apps.document.urls')),
     path('api/v1/', include('apps.chat.urls')),
     path('api/v1/', include('apps.model_management.urls')),
+    path('api/v1/', include('apps.mcp_server.urls')),
+    path('mcp/<uuid:profile_id>/', mcp_endpoint, name='mcp-endpoint'),
 ]
 
 if settings.DEBUG:

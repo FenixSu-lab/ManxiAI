@@ -1,47 +1,37 @@
 # ManxiAI
 
-ManxiAI is a Django + Vue knowledge-base application with PostgreSQL, pgvector, document ingestion, embeddings, vector retrieval, and RAG chat.
+ManxiAI is a Django + Vue knowledge-base and RAG chat application. It uses PostgreSQL + pgvector for vector retrieval, supports OpenAI-compatible embedding services, supports DeepSeek/Qwen/OpenAI-compatible chat providers, and can expose a knowledge base as a hosted MCP Server.
 
-## Current Capabilities
+## Current Features
 
-- User registration, login, profile update, teams, and API-key management.
-- Knowledge-base CRUD, document upload, web document creation, QA document creation, and document detail browsing.
-- Paragraph embedding storage in PostgreSQL with pgvector.
-- RAG chat sessions linked to a knowledge base.
-- Dashboard summary counters and runtime health display.
-- OpenAI-compatible embedding provider support, OpenAI/DeepSeek-compatible LLM support, and local debug providers for smoke tests.
-- Frontend built with Vue 3, TypeScript, Vite, Pinia, Element Plus.
+- Token-based user registration, login, profile, API key, and team APIs.
+- Knowledge-base management with `owner`, `write`, `read`, and `none` access levels.
+- Public/Open knowledge bases: all signed-in users can read; only owner/write users can maintain data.
+- Document data sources: file upload, web crawl, QA entries, and chat archives.
+- RAG chat sessions bound to readable knowledge bases.
+- Chat sharing: generate a public read-only conversation link and revoke it later.
+- Chat archiving: preview a conversation and save selected QA pairs as a managed `chat_archive` data source.
+- Model management UI for DeepSeek, Qwen, OpenAI-compatible, and custom OpenAI-compatible providers.
+- Hosted MCP Server export for knowledge bases, with bearer token auth, tool scopes, access logs, and token rotation.
+- Vue 3 + TypeScript + Vite + Pinia + Element Plus frontend.
 
-## Runtime Requirements
+## Tech Stack
 
-- Python 3.10+ recommended.
-- Node.js 18+ recommended.
-- PostgreSQL with the `vector` extension installed.
-- A reachable OpenAI-compatible embedding endpoint, or `hash_debug` for diagnostics only.
-- A DeepSeek/OpenAI-compatible chat model key for real LLM replies, or `debug` for diagnostics only.
+- Backend: Django 4.2, Django REST Framework, Token Authentication.
+- Database: PostgreSQL with `vector` extension.
+- Embeddings: `http_openai_compatible`, `openai`, or local `hash_debug`.
+- LLM: model management table first, then `.env` fallback; supports DeepSeek/OpenAI-compatible APIs.
+- Frontend: Vue 3, TypeScript, Vite, Element Plus.
 
-## Backend Setup
+## Environment
 
-```powershell
-cd D:\github\ManxiAI
-.\env\Scripts\Activate.ps1
-pip install -r requirements.txt
-```
-
-Create PostgreSQL database and pgvector extension:
-
-```sql
-CREATE DATABASE manxiai;
-\c manxiai
-CREATE EXTENSION IF NOT EXISTS vector;
-```
-
-Create `.env` from `env.example` and set real values:
+Create `.env` from `env.example` and set real values. Do not commit `.env`.
 
 ```env
 DEBUG=True
 SECRET_KEY=change-me
 ALLOWED_HOSTS=localhost,127.0.0.1
+CSRF_TRUSTED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 
 USE_SQLITE=False
 DB_NAME=manxiai
@@ -53,7 +43,6 @@ DB_CONN_MAX_AGE=60
 DB_CONNECT_TIMEOUT=10
 DB_GSSENCMODE=disable
 DB_SSLMODE=disable
-DB_APPLICATION_NAME=manxiai-django
 
 DEFAULT_LLM_PROVIDER=deepseek
 DEFAULT_LLM_MODEL=deepseek-chat
@@ -65,20 +54,62 @@ EMBEDDING_MODEL=bge-large-zh-v1.5
 EMBEDDING_DIMENSIONS=1024
 EMBEDDING_API_URL=http://127.0.0.1:8884/v1/embeddings
 EMBEDDING_API_KEY=
+
+MCP_PUBLIC_BASE_URL=
+MCP_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 ```
 
-Run migrations and start Django:
+For LAN access, replace `192.168.x.x` with this machine's actual LAN IP:
+
+```env
+ALLOWED_HOSTS=localhost,127.0.0.1,192.168.x.x
+CSRF_TRUSTED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000,http://192.168.x.x:3000,http://192.168.x.x:8000
+MCP_PUBLIC_BASE_URL=http://192.168.x.x:8000
+MCP_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000,http://192.168.x.x:3000
+```
+
+## Database Setup
+
+Create PostgreSQL database and enable pgvector:
+
+```sql
+CREATE DATABASE manxiai;
+\c manxiai
+CREATE EXTENSION IF NOT EXISTS vector;
+```
+
+Run migrations:
 
 ```powershell
 .\env\Scripts\python.exe manage.py migrate
+```
+
+Create a local diagnostic admin account:
+
+```powershell
 .\env\Scripts\python.exe manage.py ensure_dev_admin --allow-default-password
+```
+
+Default local account: `admin@example.com` / `Admin123!`. For non-local use, pass `--password <value>` instead of using the default password.
+
+## Run Locally
+
+Backend:
+
+```powershell
+cd D:\github\ManxiAI
+.\env\Scripts\Activate.ps1
+pip install -r requirements.txt
 .\env\Scripts\python.exe manage.py runserver 127.0.0.1:8000
 ```
 
-The local diagnostic admin account is `admin@example.com` / `Admin123!`.
-Use `--password <value>` instead of `--allow-default-password` if you want a custom password.
+LAN backend:
 
-## Frontend Setup
+```powershell
+.\env\Scripts\python.exe manage.py runserver 0.0.0.0:8000
+```
+
+Frontend:
 
 ```powershell
 cd D:\github\ManxiAI\frontend
@@ -86,24 +117,85 @@ npm install
 npm run dev
 ```
 
-The Vite dev server runs on `http://127.0.0.1:3000` and proxies `/api` to `http://127.0.0.1:8000`.
-Set `VITE_API_PROXY_TARGET` if you need the dev proxy to point at a different backend port.
+Default URLs:
 
-For the normal local workflow, prefer the deterministic restart script. It stops stale Django/Vite processes for this workspace, runs backend checks, starts both servers, and verifies the frontend proxy:
+- Frontend: `http://127.0.0.1:3000`
+- Backend API: `http://127.0.0.1:8000/api/v1/`
+- Health check: `http://127.0.0.1:8000/api/v1/health/`
+- Swagger: `http://127.0.0.1:8000/swagger/`
+- Django Admin: `http://127.0.0.1:8000/admin/`
+
+For a deterministic full-stack restart:
 
 ```powershell
 .\scripts\dev_restart.ps1
 ```
 
-From the frontend directory, the same flow is available as:
+From `frontend/`:
 
 ```powershell
 npm run dev:fullstack
 ```
 
-## Verification Commands
+## Core Workflows
 
-Run these after changing database, embedding, RAG, auth, or frontend integration code:
+### Knowledge Permissions
+
+- `owner`: manage knowledge base settings, users, data sources, MCP exports.
+- `write`: maintain data sources and archive chats into the knowledge base.
+- `read`: view and chat only.
+- `none`: no access.
+- Open knowledge bases skip read permission checks for signed-in users, but write operations still require owner/write.
+
+### Chat Sharing
+
+In a chat detail page, use `分享对话` to generate a public read-only URL:
+
+```text
+/share/chat/<token>
+```
+
+Anyone with the link can view the shared conversation. They cannot continue the chat or modify data. The owner can revoke the share.
+
+### Chat Archive As Knowledge
+
+In a chat detail page, use `归档为数据源` to preview QA pairs and save them into a writable knowledge base as a `chat_archive` data source. The archived source remains visible and manageable from the knowledge-base data-source table.
+
+### Model Management
+
+Open `Model Management` in the sidebar to manage chat providers.
+
+- DeepSeek default endpoint: `https://api.deepseek.com`
+- Qwen DashScope OpenAI-compatible endpoint: `https://dashscope.aliyuncs.com/compatible-mode/v1`
+- Custom providers must expose an OpenAI-compatible `/chat/completions` API.
+- If no active database provider exists, the backend falls back to `.env` settings.
+
+### Hosted MCP Server Export
+
+Knowledge-base owners can export a knowledge base as a hosted MCP Server from the knowledge-base detail page.
+
+- Endpoint: `/mcp/<profile_id>/`
+- Auth: dedicated `Bearer mcp_...` token, shown only on create/rotate.
+- Protocol: Streamable HTTP style JSON-RPC POST with `application/json` responses.
+- MCP methods: `initialize`, `tools/list`, `tools/call`, `resources/list`, `resources/read`.
+- Tools: `search_knowledge`, `list_sources`, `get_document`, `get_paragraph`, `answer_with_citations`.
+- Scopes: `search_only`, `citations_only`, `read_only`.
+- Audit logs: method, tool, query, caller IP, latency, result count, status.
+
+Example external MCP client config:
+
+```json
+{
+  "name": "ManxiAI Knowledge Base",
+  "url": "http://192.168.x.x:8000/mcp/<profile_id>/",
+  "authorization": "Bearer <token>",
+  "protocol": "mcp-streamable-http"
+}
+```
+
+## Verification
+
+Backend checks:
 
 ```powershell
 .\env\Scripts\python.exe manage.py check
@@ -112,89 +204,83 @@ Run these after changing database, embedding, RAG, auth, or frontend integration
 .\env\Scripts\python.exe manage.py check_db_latency --warn-only --compare-client-modes
 .\env\Scripts\python.exe manage.py check_embedding_endpoint --warn-only
 .\env\Scripts\python.exe manage.py check_rag_stack
-.\env\Scripts\python.exe manage.py check_rag_stack --live
 .\env\Scripts\python.exe manage.py check_llm_stack
-.\env\Scripts\python.exe manage.py check_llm_stack --live
 .\env\Scripts\python.exe manage.py smoke_auth_flow
 .\env\Scripts\python.exe manage.py smoke_api_stack
+```
+
+Live provider checks:
+
+```powershell
+.\env\Scripts\python.exe manage.py check_rag_stack --live
+.\env\Scripts\python.exe manage.py check_llm_stack --live
 .\env\Scripts\python.exe manage.py smoke_api_stack --real-embedding --timeout 30
 ```
 
-Frontend build check:
+Frontend build:
 
 ```powershell
 cd frontend
 npm run build
-npm run smoke:fullstack
 ```
 
-Focused backend tests:
+Focused tests:
 
 ```powershell
 $env:USE_SQLITE='True'
-.\env\Scripts\python.exe -m pytest apps/chat/tests apps/document/tests apps/embedding/tests apps/model_management/tests apps/pipeline/tests -q
+.\env\Scripts\python.exe -m pytest apps/chat/tests apps/knowledge_base/tests apps/document/tests apps/mcp_server/tests apps/model_management/tests apps/pipeline/tests -q
 ```
 
-## Provider Notes
+## Troubleshooting
 
-- `EMBEDDING_PROVIDER=http_openai_compatible` calls `EMBEDDING_API_URL` using the OpenAI `/embeddings` response shape.
-- `EMBEDDING_PROVIDER=openai` uses `OPENAI_BASE_URL + /embeddings` and requires a real `OPENAI_API_KEY` or `EMBEDDING_API_KEY`.
-- `EMBEDDING_PROVIDER=hash_debug` is deterministic and local, but it is only for tests and smoke checks.
-- `check_embedding_endpoint --warn-only` diagnoses the configured embedding service with TCP, health, and OpenAI-compatible POST checks.
-- `DEFAULT_LLM_PROVIDER=debug` is deterministic and local, useful for smoke tests without spending LLM tokens.
-- `DEFAULT_LLM_PROVIDER=deepseek` or `openai` is needed for real assistant answers.
-- `check_llm_stack --live` sends one minimal real chat request. Use it when validating production LLM credentials.
+### Frontend reports network error
 
-## Model Management
+- Confirm Django is running.
+- Confirm Vite proxy target points to the backend.
+- Visit `http://127.0.0.1:8000/api/v1/health/`.
+- If the backend is slow after login, run `check_db_latency --warn-only --compare-client-modes`.
 
-- Admin users can open `Model Management` in the left navigation to manage chat model providers.
-- Supported presets include DeepSeek and 通义千问 Qwen. Custom providers are supported when they expose an OpenAI-compatible `/chat/completions` API.
-- When no database provider is active, the backend falls back to `.env` settings such as `DEFAULT_LLM_PROVIDER`, `DEFAULT_LLM_MODEL`, and `DEEPSEEK_API_KEY`.
-- A real provider must have `Base URL`, `Model`, and `API Key` before it can be activated. Use `Test` before `Activate` to verify credentials and network access.
-- Qwen's OpenAI-compatible DashScope endpoint is `https://dashscope.aliyuncs.com/compatible-mode/v1`; the default model preset is `qwen-plus`.
+### PostgreSQL connection is slow on Windows
 
-## Knowledge Permissions And Chat Archives
+Keep these local settings unless your database requires SSL/GSS:
 
-- Knowledge-base roles are intentionally limited to `owner`, `write`, `read`, and `none`.
-- `owner` can manage settings, permissions, and all data sources. `write` can maintain data sources and archive chats. `read` can view and chat only.
-- Open knowledge bases are readable by all signed-in users. They still require `owner` or explicit `write` permission for uploads, edits, deletes, reprocessing, or chat archiving.
-- Owners can manage permissions from the knowledge-base detail page. Users are selected from a system-user dropdown instead of free-form external emails.
-- Chat detail pages can archive a conversation as a `chat_archive` data source. The archive flow supports preview first, then creates a visible data source that can be deleted or reprocessed from the data-source list.
-
-## Authentication Notes
-
-- The SPA uses DRF token authentication, not Django session authentication.
-- Login and registration must work without a CSRF cookie when called from `http://localhost:3000`.
-- Run `.\env\Scripts\python.exe manage.py smoke_auth_flow` after changing auth, CORS, CSRF, or frontend proxy settings.
-- Run `.\env\Scripts\python.exe manage.py ensure_dev_admin --allow-default-password` after rebuilding the local database to restore the diagnostic admin account.
-- If a stale backend keeps returning old behavior, stop duplicate runserver processes before restarting:
-
-```powershell
-Get-CimInstance Win32_Process -Filter "name='python.exe'" |
-  Where-Object { $_.CommandLine -like '*manage.py runserver*' } |
-  ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+```env
+DB_GSSENCMODE=disable
+DB_SSLMODE=disable
 ```
 
-## Database Latency Notes
+### Login returns CSRF errors
 
-- `GET /api/v1/health/` returns backend status and database query latency without authentication.
-- Run `.\env\Scripts\python.exe manage.py check_db_latency --warn-only --compare-client-modes` when the frontend reports backend timeouts after login.
-- If TCP latency is low but PostgreSQL handshake latency is high, first check `DB_GSSENCMODE=disable`. On Windows and local networks, default libpq GSS negotiation can add 15-20 seconds to the first PostgreSQL connection.
-- Keep `DB_SSLMODE=disable` for local PostgreSQL servers that do not use SSL. Use `require` or `verify-full` only when the server is configured for SSL.
-- Prefer `DB_HOST=127.0.0.1` only when PostgreSQL is actually listening locally and `pg_hba.conf` allows it. Otherwise use the reachable host and fix the handshake delay at the database layer.
+The SPA uses DRF token authentication. Login should not require a CSRF cookie. If CSRF errors appear, stop duplicate stale Django runserver processes and restart the backend from this project virtualenv.
 
-## Useful URLs
+### MCP URL still shows `127.0.0.1`
 
-- Frontend: `http://127.0.0.1:3000`
-- Backend API: `http://127.0.0.1:8000/api/v1/`
-- Health check: `http://127.0.0.1:8000/api/v1/health/`
-- Swagger: `http://127.0.0.1:8000/swagger/`
-- ReDoc: `http://127.0.0.1:8000/redoc/`
-- Django Admin: `http://127.0.0.1:8000/admin/`
+Set:
+
+```env
+MCP_PUBLIC_BASE_URL=http://<lan-ip>:8000
+```
+
+Then restart Django and reload the knowledge-base detail page.
+
+## Cleanup Policy
+
+Generated files are intentionally ignored:
+
+- `.env`
+- `env/`, `venv/`, `.venv/`
+- `__pycache__/`, `.pytest_cache/`
+- `logs/`, `tmp/`, `*.log`
+- `db.sqlite3`
+- `frontend/node_modules/`, `frontend/dist/`
+- `media/`, `staticfiles/`
+
+Do not commit real API keys, local databases, runtime logs, build output, or virtual environments.
 
 ## Development Conventions
 
-- Add a file header comment/docstring for new files.
-- Add docstrings for functions and methods.
-- Log key inputs, outputs, IDs, and failure states around backend operations.
-- Do not commit `.env`, local databases, virtualenvs, build output, or runtime logs.
+- New backend files should include a module docstring.
+- New functions and methods should include concise docstrings.
+- Log key IDs, inputs, outputs, and failure states around backend operations.
+- Keep user-facing UI text Chinese-first for product pages.
+- Prefer PostgreSQL + pgvector for real local validation; use SQLite only for isolated tests.

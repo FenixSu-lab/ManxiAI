@@ -17,6 +17,8 @@ logs/
 media/
 staticfiles/
 tmp/
+tmp_*.log
+*.log
 db.sqlite3
 db.sqlite3-journal
 

@@ -1,4 +1,0 @@
-D:\github\ManxiAI\env\Lib\site-packages\drf_yasg\__init__.py:2: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
-  from pkg_resources import DistributionNotFound, get_distribution
-INFO 2026-06-24 08:41:46,084 basehttp 25692 33288 - Broken pipe from ('127.0.0.1', 34619)
-INFO 2026-06-24 08:41:46,610 basehttp 25692 20664 "GET /swagger/ HTTP/1.1" 200 2158

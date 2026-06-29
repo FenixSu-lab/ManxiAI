@@ -289,6 +289,50 @@ export const searchUsers = (params) => {
   })
 }
 
+export const getMcpProfiles = (knowledgeBaseId) => {
+  return api({
+    url: `/knowledge-bases/${knowledgeBaseId}/mcp-profiles/`,
+    method: 'get'
+  })
+}
+
+export const createMcpProfile = (knowledgeBaseId, data) => {
+  return api({
+    url: `/knowledge-bases/${knowledgeBaseId}/mcp-profiles/`,
+    method: 'post',
+    data
+  })
+}
+
+export const updateMcpProfile = (knowledgeBaseId, profileId, data) => {
+  return api({
+    url: `/knowledge-bases/${knowledgeBaseId}/mcp-profiles/${profileId}/`,
+    method: 'patch',
+    data
+  })
+}
+
+export const deleteMcpProfile = (knowledgeBaseId, profileId) => {
+  return api({
+    url: `/knowledge-bases/${knowledgeBaseId}/mcp-profiles/${profileId}/`,
+    method: 'delete'
+  })
+}
+
+export const rotateMcpProfileToken = (knowledgeBaseId, profileId) => {
+  return api({
+    url: `/knowledge-bases/${knowledgeBaseId}/mcp-profiles/${profileId}/rotate_token/`,
+    method: 'post'
+  })
+}
+
+export const getMcpProfileLogs = (knowledgeBaseId, profileId) => {
+  return api({
+    url: `/knowledge-bases/${knowledgeBaseId}/mcp-profiles/${profileId}/logs/`,
+    method: 'get'
+  })
+}
+
 // 获取公开的知识库
 export const getPublicKnowledgeBases = (params) => {
   return api({

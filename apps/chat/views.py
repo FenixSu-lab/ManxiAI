@@ -2,21 +2,25 @@
 
 import logging
 
+from django.db import models
 from django.db import transaction
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import permissions, status, viewsets
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 
 from apps.knowledge_base.models import KnowledgeBase
 from apps.knowledge_base.permissions import filter_visible, require_read
 from apps.pipeline.services import RetrievalAugmentedGenerationService
 
-from .models import ChatMessage, ChatSession
+from .models import ChatMessage, ChatSession, ChatShare
 from .serializers import (
     ChatArchiveSerializer,
     ChatMessageCreateSerializer,
     ChatMessageSerializer,
+    ChatShareSerializer,
+    PublicChatShareSerializer,
     ChatSessionCreateSerializer,
     ChatSessionSerializer,
 )
@@ -175,3 +179,54 @@ class ChatSessionViewSet(viewsets.ModelViewSet):
             message_ids=message_ids or None,
         )
         return Response(payload, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['get', 'post', 'delete'])
+    def share(self, request, pk=None):
+        """Get, create, or revoke a public read-only share link."""
+        session = self.get_object()
+
+        if request.method == 'GET':
+            share = getattr(session, 'share', None)
+            if not share:
+                return Response({'is_active': False})
+            return Response(ChatShareSerializer(share).data)
+
+        if request.method == 'DELETE':
+            share = getattr(session, 'share', None)
+            if not share:
+                return Response(status=status.HTTP_204_NO_CONTENT)
+            share.is_active = False
+            share.save(update_fields=['is_active', 'updated_at'])
+            logger.info('chat_share_revoked user_id=%s session_id=%s share_id=%s', request.user.id, session.id, share.id)
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
+        share, created = ChatShare.objects.get_or_create(
+            session=session,
+            defaults={
+                'token': ChatShare.generate_token(),
+                'created_by': request.user,
+                'is_active': True,
+            },
+        )
+        if not created and not share.is_active:
+            share.is_active = True
+            share.save(update_fields=['is_active', 'updated_at'])
+        logger.info('chat_share_enabled user_id=%s session_id=%s share_id=%s created=%s', request.user.id, session.id, share.id, created)
+        return Response(ChatShareSerializer(share).data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def public_chat_share(request, token):
+    """Return a public read-only chat share by token."""
+    share = get_object_or_404(
+        ChatShare.objects.select_related('session', 'session__knowledge_base').prefetch_related('session__messages'),
+        token=token,
+        is_active=True,
+    )
+    ChatShare.objects.filter(id=share.id).update(
+        view_count=models.F('view_count') + 1,
+        last_viewed_at=timezone.now(),
+    )
+    logger.info('chat_share_viewed share_id=%s session_id=%s', share.id, share.session_id)
+    return Response(PublicChatShareSerializer(share).data)

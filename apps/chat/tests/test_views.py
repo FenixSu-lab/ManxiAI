@@ -3,9 +3,9 @@
 from unittest.mock import patch
 
 from django.test import TestCase
-from rest_framework.test import APIRequestFactory, force_authenticate
+from rest_framework.test import APIClient, APIRequestFactory, force_authenticate
 
-from apps.chat.models import ChatMessage, ChatSession
+from apps.chat.models import ChatMessage, ChatSession, ChatShare
 from apps.chat.views import ChatSessionViewSet
 from apps.document.models import Document, DocumentType, Paragraph, ProblemParagraphMapping
 from apps.knowledge_base.models import KnowledgeBase, KnowledgeBaseShare
@@ -188,3 +188,43 @@ class ChatSessionViewSetTests(TestCase):
         response = view(request, pk=session.id)
 
         self.assertEqual(response.status_code, 403)
+
+    def test_owner_can_create_public_chat_share(self):
+        """Session owners should be able to create a public read-only share."""
+        session = ChatSession.objects.create(user=self.user, title='Shared chat', knowledge_base=self.knowledge_base)
+        ChatMessage.objects.create(session=session, role=ChatMessage.RoleChoices.USER, content='Share question')
+        view = ChatSessionViewSet.as_view({'post': 'share'})
+        request = self.factory.post(f'/api/v1/chat/sessions/{session.id}/share/', {}, format='json')
+        force_authenticate(request, user=self.user)
+
+        response = view(request, pk=session.id)
+
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(response.data['token'])
+        self.assertTrue(ChatShare.objects.filter(session=session, is_active=True).exists())
+
+    def test_public_chat_share_returns_messages_without_auth(self):
+        """Public share endpoint should expose only read-only message data."""
+        session = ChatSession.objects.create(user=self.user, title='Shared chat', knowledge_base=self.knowledge_base)
+        ChatMessage.objects.create(session=session, role=ChatMessage.RoleChoices.USER, content='Share question')
+        ChatMessage.objects.create(session=session, role=ChatMessage.RoleChoices.ASSISTANT, content='Share answer')
+        share = ChatShare.objects.create(session=session, token=ChatShare.generate_token(), created_by=self.user)
+        client = APIClient()
+
+        response = client.get(f'/api/v1/chat/shares/{share.token}/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['title'], 'Shared chat')
+        self.assertEqual(len(response.data['messages']), 2)
+        share.refresh_from_db()
+        self.assertEqual(share.view_count, 1)
+
+    def test_revoked_chat_share_is_not_public(self):
+        """Revoked share links should no longer be readable."""
+        session = ChatSession.objects.create(user=self.user, title='Revoked chat', knowledge_base=self.knowledge_base)
+        share = ChatShare.objects.create(session=session, token=ChatShare.generate_token(), created_by=self.user, is_active=False)
+        client = APIClient()
+
+        response = client.get(f'/api/v1/chat/shares/{share.token}/')
+
+        self.assertEqual(response.status_code, 404)

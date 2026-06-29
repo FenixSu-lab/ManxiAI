@@ -31,6 +31,10 @@
         <el-button :disabled="!writableKnowledgeBases.length || messages.length === 0" @click="openArchiveDialog">
           归档为数据源
         </el-button>
+        <el-button :disabled="messages.length === 0" @click="openShareDialog">
+          <el-icon><Share /></el-icon>
+          分享对话
+        </el-button>
         <el-button type="primary" @click="clearChat">
           <el-icon><Delete /></el-icon>
           清空对话
@@ -64,6 +68,29 @@
       <template #footer>
         <el-button @click="archiveDialogVisible = false">取消</el-button>
         <el-button type="primary" :disabled="archivePreview.length === 0" :loading="archiving" @click="createArchive">确认归档</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="shareDialogVisible" title="分享对话" width="620px">
+      <el-alert
+        type="warning"
+        show-icon
+        :closable="false"
+        title="分享链接是公开只读链接，拿到链接的人都可以查看当前对话内容。"
+      />
+      <div v-if="shareInfo?.is_active" class="share-link-box">
+        <el-input :model-value="shareUrl" readonly>
+          <template #append>
+            <el-button @click="copyShareLink">复制</el-button>
+          </template>
+        </el-input>
+        <p>访问次数：{{ shareInfo.view_count || 0 }}</p>
+      </div>
+      <el-empty v-else description="当前对话还没有开启分享" />
+      <template #footer>
+        <el-button @click="shareDialogVisible = false">关闭</el-button>
+        <el-button v-if="shareInfo?.is_active" type="danger" :loading="shareLoading" @click="revokeShare">撤销分享</el-button>
+        <el-button v-else type="primary" :loading="shareLoading" @click="enableShare">生成分享链接</el-button>
       </template>
     </el-dialog>
 
@@ -158,7 +185,8 @@ import {
   ChatDotRound,
   DocumentCopy,
   Refresh,
-  Promotion
+  Promotion,
+  Share
 } from '@element-plus/icons-vue'
 
 const route = useRoute()
@@ -188,6 +216,15 @@ interface ChatMessageDto {
   updated_at?: string
 }
 
+interface ChatShareDto {
+  id?: string
+  token?: string
+  is_active: boolean
+  view_count?: number
+  last_viewed_at?: string
+  created_at?: string
+}
+
 const chatSession = ref<ChatSessionDto | null>(null)
 const knowledgeBases = ref<KnowledgeBaseOption[]>([])
 const selectedKnowledgeBaseId = ref<string | null>(null)
@@ -197,9 +234,12 @@ const sending = ref(false)
 const isTyping = ref(false)
 const messagesContainer = ref<HTMLElement | null>(null)
 const archiveDialogVisible = ref(false)
+const shareDialogVisible = ref(false)
 const archivePreviewing = ref(false)
 const archiving = ref(false)
+const shareLoading = ref(false)
 const archivePreview = ref<Array<{ question: string; answer: string }>>([])
+const shareInfo = ref<ChatShareDto | null>(null)
 const archiveForm = ref({
   knowledge_base_id: '',
   name: ''
@@ -207,6 +247,7 @@ const archiveForm = ref({
 
 const userAvatar = computed(() => authStore.user?.avatar)
 const writableKnowledgeBases = computed(() => knowledgeBases.value.filter((knowledgeBase) => knowledgeBase.can_write))
+const shareUrl = computed(() => shareInfo.value?.token ? `${window.location.origin}/share/chat/${shareInfo.value.token}` : '')
 
 const formatTime = (time: string) => {
   if (!time) return ''
@@ -271,6 +312,59 @@ const createArchive = async () => {
     ElMessage.error(getApiErrorMessage(error, '归档失败'))
   } finally {
     archiving.value = false
+  }
+}
+
+const openShareDialog = async () => {
+  shareDialogVisible.value = true
+  await loadShareInfo()
+}
+
+const loadShareInfo = async () => {
+  shareLoading.value = true
+  try {
+    const response = await api.get(`/chat/sessions/${chatId}/share/`)
+    shareInfo.value = response.data
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '加载分享状态失败'))
+  } finally {
+    shareLoading.value = false
+  }
+}
+
+const enableShare = async () => {
+  shareLoading.value = true
+  try {
+    const response = await api.post(`/chat/sessions/${chatId}/share/`)
+    shareInfo.value = response.data
+    ElMessage.success('分享链接已生成')
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '生成分享链接失败'))
+  } finally {
+    shareLoading.value = false
+  }
+}
+
+const revokeShare = async () => {
+  shareLoading.value = true
+  try {
+    await api.delete(`/chat/sessions/${chatId}/share/`)
+    shareInfo.value = { is_active: false }
+    ElMessage.success('分享已撤销')
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '撤销分享失败'))
+  } finally {
+    shareLoading.value = false
+  }
+}
+
+const copyShareLink = async () => {
+  if (!shareUrl.value) return
+  try {
+    await navigator.clipboard.writeText(shareUrl.value)
+    ElMessage.success('分享链接已复制')
+  } catch (error) {
+    ElMessage.error('复制失败')
   }
 }
 
@@ -467,6 +561,16 @@ onMounted(() => {
 
 .archive-preview {
   margin-top: 8px;
+}
+
+.share-link-box {
+  margin-top: 16px;
+
+  p {
+    margin: 10px 0 0;
+    color: #6b7280;
+    font-size: 13px;
+  }
 }
 
 .chat-messages {

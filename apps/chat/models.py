@@ -1,4 +1,6 @@
 ﻿"""Chat models for persistent sessions and messages."""
+import secrets
+
 from django.conf import settings
 from django.db import models
 
@@ -58,3 +60,35 @@ class ChatMessage(BaseModel):
     def __str__(self):
         """Return a compact preview string."""
         return f'{self.role}: {self.content[:30]}'
+
+
+class ChatShare(BaseModel):
+    """Public read-only share link for a chat session."""
+
+    session = models.OneToOneField(
+        ChatSession,
+        on_delete=models.CASCADE,
+        related_name='share',
+    )
+    token = models.CharField(max_length=80, unique=True, db_index=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='chat_shares',
+    )
+    is_active = models.BooleanField(default=True)
+    view_count = models.PositiveIntegerField(default=0)
+    last_viewed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'chat_shares'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        """Return a readable share label."""
+        return f'Share {self.session_id}'
+
+    @staticmethod
+    def generate_token() -> str:
+        """Generate a URL-safe public share token."""
+        return secrets.token_urlsafe(32)

@@ -1,7 +1,7 @@
 ﻿"""URL configuration for chat APIs."""
 from django.urls import path
 
-from .views import ChatSessionViewSet
+from .views import ChatSessionViewSet, public_chat_share
 
 app_name = 'chat'
 
@@ -24,4 +24,10 @@ urlpatterns = [
     path('chat/sessions/<uuid:pk>/archive/', ChatSessionViewSet.as_view({
         'post': 'archive',
     }), name='chat-session-archive'),
+    path('chat/sessions/<uuid:pk>/share/', ChatSessionViewSet.as_view({
+        'get': 'share',
+        'post': 'share',
+        'delete': 'share',
+    }), name='chat-session-share'),
+    path('chat/shares/<str:token>/', public_chat_share, name='public-chat-share'),
 ]

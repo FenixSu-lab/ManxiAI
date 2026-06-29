@@ -42,7 +42,7 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-manxiai-development-key-ch
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'
 
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+ALLOWED_HOSTS = [host.strip() for host in os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',') if host.strip()]
 
 CSRF_TRUSTED_ORIGINS = [
     origin.strip()
@@ -82,6 +82,7 @@ LOCAL_APPS = [
     'apps.pipeline',
     'apps.workflow',
     'apps.model_management',
+    'apps.mcp_server',
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -212,6 +213,10 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
 ]
+
+# Hosted MCP Server public base URL, for example: http://192.168.1.14:8000
+MCP_PUBLIC_BASE_URL = getenv_str('MCP_PUBLIC_BASE_URL', '')
+MCP_ALLOWED_ORIGINS = getenv_str('MCP_ALLOWED_ORIGINS', '')
 
 # Swagger/OpenAPI settings
 SWAGGER_SETTINGS = {

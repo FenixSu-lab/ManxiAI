@@ -1,7 +1,7 @@
 ﻿"""Serializers for chat APIs."""
 from rest_framework import serializers
 
-from .models import ChatMessage, ChatSession
+from .models import ChatMessage, ChatSession, ChatShare
 
 
 class ChatMessageSerializer(serializers.ModelSerializer):
@@ -86,3 +86,30 @@ class ChatArchiveSerializer(serializers.Serializer):
     mode = serializers.ChoiceField(choices=[('qa', 'QA')], default='qa')
     message_ids = serializers.ListField(child=serializers.UUIDField(), required=False, allow_empty=True)
     preview = serializers.BooleanField(default=False)
+
+
+class ChatShareSerializer(serializers.ModelSerializer):
+    """Serialize chat share status for the session owner."""
+
+    class Meta:
+        model = ChatShare
+        fields = ['id', 'token', 'is_active', 'view_count', 'last_viewed_at', 'created_at', 'updated_at']
+        read_only_fields = fields
+
+
+class PublicChatShareSerializer(serializers.ModelSerializer):
+    """Serialize a public read-only chat share payload."""
+
+    title = serializers.CharField(source='session.title', read_only=True)
+    knowledge_base_name = serializers.CharField(source='session.knowledge_base.name', read_only=True, default='')
+    messages = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ChatShare
+        fields = ['title', 'knowledge_base_name', 'messages', 'created_at']
+        read_only_fields = fields
+
+    def get_messages(self, obj):
+        """Return messages visible in the public share page."""
+        messages = obj.session.messages.all().order_by('created_at')
+        return ChatMessageSerializer(messages, many=True).data
