@@ -189,7 +189,7 @@ export const createParagraph = (documentId, data) => {
 export const updateParagraph = (documentId, paragraphId, data) => {
   return api({
     url: `/documents/${documentId}/paragraphs/${paragraphId}/`,
-    method: 'put',
+    method: 'patch',
     data
   })
 }
@@ -278,6 +278,14 @@ export const getKnowledgeBaseShares = (knowledgeBaseId) => {
   return api({
     url: `/knowledge-bases/${knowledgeBaseId}/shares/`,
     method: 'get'
+  })
+}
+
+export const searchUsers = (params) => {
+  return api({
+    url: '/auth/users/search/',
+    method: 'get',
+    params
   })
 }
 

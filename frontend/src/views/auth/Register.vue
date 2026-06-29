@@ -3,6 +3,7 @@
 -->
 <template>
   <div class="register-container">
+    <LanguageSwitch class="auth-language-switch" />
     <div class="register-box">
       <div class="register-header">
         <h1>ManxiAI</h1>
@@ -66,6 +67,7 @@ import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormItemRule } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
+import LanguageSwitch from '@/components/LanguageSwitch.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -145,9 +147,16 @@ const handleRegister = async () => {
   display: flex;
   align-items: center;
   justify-content: center;
+  position: relative;
   background:
     radial-gradient(circle at top right, rgba(37, 99, 235, 0.3), transparent 32%),
     linear-gradient(135deg, #102a43 0%, #1f3b57 52%, #0f766e 100%);
+}
+
+.auth-language-switch {
+  position: absolute;
+  top: 22px;
+  right: 22px;
 }
 
 .register-box {

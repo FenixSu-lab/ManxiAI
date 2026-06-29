@@ -61,6 +61,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/model-management',
+      name: 'ModelManagement',
+      component: () => import('@/views/model-management/Index.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/:pathMatch(.*)*',
       name: 'NotFound',
       component: () => import('@/views/error/404.vue')

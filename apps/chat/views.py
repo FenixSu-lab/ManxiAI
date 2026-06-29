@@ -9,15 +9,18 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from apps.knowledge_base.models import KnowledgeBase
+from apps.knowledge_base.permissions import filter_visible, require_read
 from apps.pipeline.services import RetrievalAugmentedGenerationService
 
 from .models import ChatMessage, ChatSession
 from .serializers import (
+    ChatArchiveSerializer,
     ChatMessageCreateSerializer,
     ChatMessageSerializer,
     ChatSessionCreateSerializer,
     ChatSessionSerializer,
 )
+from .services import ChatArchiveService
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +61,7 @@ class ChatSessionViewSet(viewsets.ModelViewSet):
         """Create a session and optionally attach a knowledge base."""
         knowledge_base = self._resolve_knowledge_base(serializer.validated_data.get('knowledge_base_id'))
         if knowledge_base is None:
-            user_knowledge_bases = KnowledgeBase.objects.filter(created_by=self.request.user, is_deleted=False)
+            user_knowledge_bases = filter_visible(KnowledgeBase.objects.filter(is_deleted=False), self.request.user)
             if user_knowledge_bases.count() == 1:
                 knowledge_base = user_knowledge_bases.first()
         title = serializer.validated_data.get('title') or 'New Chat'
@@ -82,20 +85,19 @@ class ChatSessionViewSet(viewsets.ModelViewSet):
         )
 
     def _resolve_knowledge_base(self, knowledge_base_id):
-        """Resolve a knowledge base owned by the current user."""
+        """Resolve a knowledge base readable by the current user."""
         if not knowledge_base_id:
             return None
-        return get_object_or_404(
-            KnowledgeBase,
-            id=knowledge_base_id,
-            created_by=self.request.user,
-            is_deleted=False,
-        )
+        knowledge_base = get_object_or_404(KnowledgeBase, id=knowledge_base_id, is_deleted=False)
+        require_read(self.request.user, knowledge_base, 'attach_chat_knowledge_base')
+        return knowledge_base
 
     @action(detail=True, methods=['get', 'post', 'delete'], url_path='messages')
     def messages(self, request, pk=None):
         """List, create, or clear messages within a session."""
         session = self.get_object()
+        if session.knowledge_base:
+            require_read(request.user, session.knowledge_base, 'chat_messages')
 
         if request.method == 'GET':
             queryset = session.messages.all()
@@ -151,3 +153,25 @@ class ChatSessionViewSet(viewsets.ModelViewSet):
             },
             status=status.HTTP_201_CREATED,
         )
+
+    @action(detail=True, methods=['post'])
+    def archive(self, request, pk=None):
+        """Preview or archive a chat session as a managed knowledge data source."""
+        session = self.get_object()
+        serializer = ChatArchiveSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        knowledge_base = self._resolve_knowledge_base(serializer.validated_data['knowledge_base_id'])
+        message_ids = [str(item) for item in serializer.validated_data.get('message_ids', [])]
+        if serializer.validated_data.get('preview'):
+            payload = ChatArchiveService.preview(session, message_ids or None)
+            return Response(payload)
+
+        payload = ChatArchiveService.archive(
+            session=session,
+            knowledge_base=knowledge_base,
+            user=request.user,
+            name=serializer.validated_data.get('name', ''),
+            message_ids=message_ids or None,
+        )
+        return Response(payload, status=status.HTTP_201_CREATED)

@@ -35,6 +35,11 @@
           <el-icon><Setting /></el-icon>
           <span>Settings</span>
         </el-menu-item>
+
+        <el-menu-item index="/model-management">
+          <el-icon><Cpu /></el-icon>
+          <span>Model Management</span>
+        </el-menu-item>
       </el-menu>
     </aside>
 
@@ -47,6 +52,7 @@
         </div>
 
         <div class="header-right">
+          <LanguageSwitch />
           <el-dropdown @command="handleCommand">
             <span class="user-dropdown">
               <el-avatar :src="authStore.user?.avatar" />
@@ -79,11 +85,13 @@ import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
+import LanguageSwitch from '@/components/LanguageSwitch.vue'
 import {
   House,
   Collection,
   ChatDotRound,
   Setting,
+  Cpu,
   Expand,
   Fold,
   ArrowDown
@@ -184,6 +192,7 @@ const handleCommand = async (command: string) => {
 .header-right {
   display: flex;
   align-items: center;
+  gap: 12px;
 }
 
 .collapse-btn {

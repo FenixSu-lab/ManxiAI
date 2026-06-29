@@ -3,8 +3,10 @@
 from unittest.mock import MagicMock, patch
 
 from django.test import SimpleTestCase, override_settings
+from django.test import TestCase
 
 from apps.model_management.ai_service import AIServiceFactory, DebugLLMService, LLMProviderConfig, OpenAICompatibleLLMService
+from apps.model_management.models import LLMProvider
 
 
 class OpenAICompatibleLLMServiceTests(SimpleTestCase):
@@ -68,3 +70,31 @@ class AIServiceFactoryTests(SimpleTestCase):
 
         self.assertIsInstance(service, DebugLLMService)
         self.assertIn('Context count: 1', service.chat_with_history('hello', context=['ctx']))
+
+
+class AIServiceFactoryDatabaseProviderTests(TestCase):
+    """Verify DB-backed provider selection for runtime model switching."""
+
+    def test_active_database_provider_overrides_environment_provider(self):
+        """An active model-management provider should be used by chat/RAG services."""
+        LLMProvider.objects.create(
+            name='Qwen',
+            provider_type=LLMProvider.ProviderType.QWEN,
+            base_url='https://dashscope.aliyuncs.com/compatible-mode/v1',
+            api_key='qwen-key',
+            model='qwen-plus',
+            is_active=True,
+        )
+
+        service = AIServiceFactory.get_service()
+
+        self.assertIsInstance(service, OpenAICompatibleLLMService)
+        self.assertEqual(service.config.name, 'qwen')
+        self.assertEqual(service.config.model, 'qwen-plus')
+        self.assertEqual(service.config.base_url, 'https://dashscope.aliyuncs.com/compatible-mode/v1')
+
+    def test_no_active_database_provider_falls_back_to_settings(self):
+        """Existing .env configuration should keep working until a provider is activated."""
+        service = AIServiceFactory.get_service(provider='debug')
+
+        self.assertIsInstance(service, DebugLLMService)

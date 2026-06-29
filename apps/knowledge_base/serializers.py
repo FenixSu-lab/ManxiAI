@@ -3,6 +3,7 @@
 """
 from rest_framework import serializers
 from .models import KnowledgeBase, KnowledgeBaseShare, KnowledgeBaseTag, KnowledgeBaseSettings
+from .permissions import can_write, get_user_role, is_owner
 
 
 class KnowledgeBaseSerializer(serializers.ModelSerializer):
@@ -11,6 +12,9 @@ class KnowledgeBaseSerializer(serializers.ModelSerializer):
     """
     created_by_name = serializers.CharField(source='created_by.username', read_only=True)
     tags = serializers.StringRelatedField(many=True, read_only=True)
+    user_role = serializers.SerializerMethodField()
+    can_write = serializers.SerializerMethodField()
+    can_manage = serializers.SerializerMethodField()
     
     class Meta:
         model = KnowledgeBase
@@ -19,12 +23,27 @@ class KnowledgeBaseSerializer(serializers.ModelSerializer):
             'chunk_size', 'chunk_overlap', 'similarity_threshold', 'top_k',
             'documents_count', 'chunks_count', 'total_size',
             'created_by', 'created_by_name', 'created_at', 'updated_at',
-            'tags'
+            'tags', 'user_role', 'can_write', 'can_manage'
         ]
         read_only_fields = [
             'id', 'created_by', 'created_by_name', 'created_at', 'updated_at',
             'documents_count', 'chunks_count', 'total_size'
         ]
+
+    def get_user_role(self, obj):
+        """Return the current user's effective role on this knowledge base."""
+        request = self.context.get('request')
+        return get_user_role(request.user, obj) if request else 'none'
+
+    def get_can_write(self, obj):
+        """Return whether the current user can maintain data sources."""
+        request = self.context.get('request')
+        return can_write(request.user, obj) if request else False
+
+    def get_can_manage(self, obj):
+        """Return whether the current user can manage permissions/settings."""
+        request = self.context.get('request')
+        return is_owner(request.user, obj) if request else False
     
     def validate_name(self, value):
         """验证知识库名称唯一性"""
@@ -87,18 +106,37 @@ class KnowledgeBaseListSerializer(serializers.ModelSerializer):
     知识库列表序列化器（简化版）
     """
     created_by_name = serializers.CharField(source='created_by.username', read_only=True)
+    user_role = serializers.SerializerMethodField()
+    can_write = serializers.SerializerMethodField()
+    can_manage = serializers.SerializerMethodField()
     
     class Meta:
         model = KnowledgeBase
         fields = [
             'id', 'name', 'description', 'icon', 'status', 'is_public',
             'documents_count', 'chunks_count', 'total_size',
-            'created_by_name', 'created_at', 'updated_at'
+            'created_by_name', 'created_at', 'updated_at',
+            'user_role', 'can_write', 'can_manage'
         ]
         read_only_fields = [
             'id', 'created_by_name', 'created_at', 'updated_at',
             'documents_count', 'chunks_count', 'total_size'
         ]
+
+    def get_user_role(self, obj):
+        """Return the current user's effective role on this knowledge base."""
+        request = self.context.get('request')
+        return get_user_role(request.user, obj) if request else 'none'
+
+    def get_can_write(self, obj):
+        """Return whether the current user can maintain data sources."""
+        request = self.context.get('request')
+        return can_write(request.user, obj) if request else False
+
+    def get_can_manage(self, obj):
+        """Return whether the current user can manage permissions/settings."""
+        request = self.context.get('request')
+        return is_owner(request.user, obj) if request else False
 
 
 class KnowledgeBaseCreateSerializer(serializers.ModelSerializer):

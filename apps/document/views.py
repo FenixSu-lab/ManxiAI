@@ -15,6 +15,7 @@ from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from django.db.models import Q
 
 from apps.knowledge_base.models import KnowledgeBase
+from apps.knowledge_base.permissions import require_read, require_write
 from .models import Document, Paragraph, Problem, ProblemParagraphMapping, DocumentType, DocumentStatus
 from .serializers import (
     DocumentListSerializer, DocumentDetailSerializer, DocumentCreateSerializer,
@@ -42,8 +43,9 @@ class DocumentViewSet(viewsets.ModelViewSet):
         knowledge_base = get_object_or_404(
             KnowledgeBase,
             id=knowledge_base_id,
-            created_by=self.request.user
+            is_deleted=False
         )
+        require_read(self.request.user, knowledge_base, 'list_documents')
         return Document.objects.filter(
             knowledge_base=knowledge_base,
             is_deleted=False
@@ -73,14 +75,19 @@ class DocumentViewSet(viewsets.ModelViewSet):
             return DocumentStatsSerializer
         return DocumentListSerializer
     
-    def get_knowledge_base(self):
-        """获取知识库"""
+    def get_knowledge_base(self, required_role='read', action_name='document_access'):
+        """Return the current route knowledge base after role validation."""
         knowledge_base_id = self.kwargs.get('knowledge_base_id')
-        return get_object_or_404(
+        knowledge_base = get_object_or_404(
             KnowledgeBase,
             id=knowledge_base_id,
-            created_by=self.request.user
+            is_deleted=False
         )
+        if required_role == 'write':
+            require_write(self.request.user, knowledge_base, action_name)
+        else:
+            require_read(self.request.user, knowledge_base, action_name)
+        return knowledge_base
     
     def get_serializer_context(self):
         """获取序列化器上下文"""
@@ -118,6 +125,7 @@ class DocumentViewSet(viewsets.ModelViewSet):
     
     def create(self, request, *args, **kwargs):
         """创建文档"""
+        self.get_knowledge_base(required_role='write', action_name='create_document')
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         
@@ -141,7 +149,7 @@ class DocumentViewSet(viewsets.ModelViewSet):
         name = serializer.validated_data.get('name', file.name)
         doc_type = serializer.validated_data.get('type', 'base')
         
-        knowledge_base = self.get_knowledge_base()
+        knowledge_base = self.get_knowledge_base(required_role='write', action_name='upload_document')
         
         # 保存文件
         file_path = f"documents/{knowledge_base.id}/{uuid.uuid4()}_{file.name}"
@@ -179,7 +187,7 @@ class DocumentViewSet(viewsets.ModelViewSet):
         selector = serializer.validated_data.get('selector', '')
         depth = serializer.validated_data.get('depth', 1)
         
-        knowledge_base = self.get_knowledge_base()
+        knowledge_base = self.get_knowledge_base(required_role='write', action_name='create_web_document')
         
         # 创建文档记录
         document = Document.objects.create(
@@ -211,7 +219,7 @@ class DocumentViewSet(viewsets.ModelViewSet):
 
         qa_pairs = serializer.validated_data['qa_pairs']
         name = serializer.validated_data.get('name', f'QA-{timezone.now().strftime("%Y%m%d%H%M%S")}')
-        knowledge_base = self.get_knowledge_base()
+        knowledge_base = self.get_knowledge_base(required_role='write', action_name='create_qa_document')
 
         with transaction.atomic():
             document = Document.objects.create(
@@ -263,16 +271,14 @@ class DocumentViewSet(viewsets.ModelViewSet):
     def reprocess(self, request, *args, **kwargs):
         """重新处理文档"""
         document = self.get_object()
-        
-        # 重置状态
-        document.status = DocumentStatus.PROCESSING
-        document.save()
-        
-        # 清理旧数据
-        document.paragraphs.all().delete()
-        
-        # 重新处理
-        DocumentProcessingService.process_document_async(document)
+        require_write(request.user, document.knowledge_base, 'reprocess_document')
+        if document.type in {DocumentType.QA, DocumentType.CHAT_ARCHIVE}:
+            EmbeddingService.embed_paragraphs_async(document)
+        else:
+            document.status = DocumentStatus.PROCESSING
+            document.save()
+            document.paragraphs.all().delete()
+            DocumentProcessingService.process_document_async(document)
         
         return Response({'message': '文档重新处理已开始'})
     
@@ -285,7 +291,7 @@ class DocumentViewSet(viewsets.ModelViewSet):
         document_ids = serializer.validated_data['document_ids']
         action_type = serializer.validated_data['action']
         
-        knowledge_base = self.get_knowledge_base()
+        knowledge_base = self.get_knowledge_base(required_role='write', action_name='batch_document_operation')
         documents = Document.objects.filter(
             knowledge_base=knowledge_base,
             id__in=document_ids,
@@ -378,6 +384,18 @@ class DocumentViewSet(viewsets.ModelViewSet):
         serializer = DocumentProcessingTaskSerializer(tasks, many=True)
         return Response(serializer.data)
 
+    def perform_update(self, serializer):
+        """Update a document only when the user can write to the knowledge base."""
+        require_write(self.request.user, serializer.instance.knowledge_base, 'update_document')
+        document = serializer.save()
+        logger.info('document_updated user_id=%s document_id=%s', self.request.user.id, document.id)
+
+    def perform_destroy(self, instance):
+        """Soft-delete a document only when the user can write to the knowledge base."""
+        require_write(self.request.user, instance.knowledge_base, 'delete_document')
+        instance.soft_delete()
+        logger.info('document_deleted user_id=%s document_id=%s knowledge_base_id=%s', self.request.user.id, instance.id, instance.knowledge_base_id)
+
 
 class ParagraphViewSet(viewsets.ModelViewSet):
     """
@@ -392,18 +410,21 @@ class ParagraphViewSet(viewsets.ModelViewSet):
         document = get_object_or_404(
             Document,
             id=document_id,
-            created_by=self.request.user
+            is_deleted=False
         )
+        require_read(self.request.user, document.knowledge_base, 'list_paragraphs')
         return document.paragraphs.all().order_by('position')
     
     def get_document(self):
         """获取文档"""
         document_id = self.kwargs.get('document_id')
-        return get_object_or_404(
+        document = get_object_or_404(
             Document,
             id=document_id,
-            created_by=self.request.user
+            is_deleted=False
         )
+        require_write(self.request.user, document.knowledge_base, 'write_paragraph')
+        return document
     
     def perform_create(self, serializer):
         """创建段落"""
@@ -414,13 +435,16 @@ class ParagraphViewSet(viewsets.ModelViewSet):
         )
     
     def perform_update(self, serializer):
-        """更新段落"""
+        """??????"""
+        require_write(self.request.user, serializer.instance.document.knowledge_base, 'update_paragraph')
         paragraph = serializer.save()
         # 更新文档统计
         paragraph.document.update_stats()
+        EmbeddingService.embed_paragraphs_async(paragraph.document)
     
     def perform_destroy(self, instance):
-        """删除段落"""
+        """??????"""
+        require_write(self.request.user, instance.document.knowledge_base, 'delete_paragraph')
         document = instance.document
         instance.delete()
         # 更新文档统计
@@ -430,6 +454,7 @@ class ParagraphViewSet(viewsets.ModelViewSet):
     def toggle_active(self, request, *args, **kwargs):
         """切换段落激活状态"""
         paragraph = self.get_object()
+        require_write(request.user, paragraph.document.knowledge_base, 'toggle_paragraph')
         paragraph.is_active = not paragraph.is_active
         paragraph.save()
         
@@ -452,23 +477,39 @@ class ProblemViewSet(viewsets.ModelViewSet):
         knowledge_base = get_object_or_404(
             KnowledgeBase,
             id=knowledge_base_id,
-            created_by=self.request.user
+            is_deleted=False
         )
+        require_read(self.request.user, knowledge_base, 'list_problems')
         return knowledge_base.problems.all().order_by('-created_at')
     
-    def get_knowledge_base(self):
-        """获取知识库"""
+    def get_knowledge_base(self, required_role='read', action_name='problem_access'):
+        """Return the current route knowledge base after role validation."""
         knowledge_base_id = self.kwargs.get('knowledge_base_id')
-        return get_object_or_404(
+        knowledge_base = get_object_or_404(
             KnowledgeBase,
             id=knowledge_base_id,
-            created_by=self.request.user
+            is_deleted=False
         )
+        if required_role == 'write':
+            require_write(self.request.user, knowledge_base, action_name)
+        else:
+            require_read(self.request.user, knowledge_base, action_name)
+        return knowledge_base
     
     def perform_create(self, serializer):
         """创建问题"""
-        knowledge_base = self.get_knowledge_base()
+        knowledge_base = self.get_knowledge_base(required_role='write', action_name='create_problem')
         serializer.save(knowledge_base=knowledge_base)
+
+    def perform_update(self, serializer):
+        """Update a problem only when the user can write to the knowledge base."""
+        require_write(self.request.user, serializer.instance.knowledge_base, 'update_problem')
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        """Delete a problem only when the user can write to the knowledge base."""
+        require_write(self.request.user, instance.knowledge_base, 'delete_problem')
+        instance.delete()
     
     @action(detail=False, methods=['get'])
     def search(self, request, *args, **kwargs):

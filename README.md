@@ -71,8 +71,12 @@ Run migrations and start Django:
 
 ```powershell
 .\env\Scripts\python.exe manage.py migrate
+.\env\Scripts\python.exe manage.py ensure_dev_admin --allow-default-password
 .\env\Scripts\python.exe manage.py runserver 127.0.0.1:8000
 ```
+
+The local diagnostic admin account is `admin@example.com` / `Admin123!`.
+Use `--password <value>` instead of `--allow-default-password` if you want a custom password.
 
 ## Frontend Setup
 
@@ -141,11 +145,28 @@ $env:USE_SQLITE='True'
 - `DEFAULT_LLM_PROVIDER=deepseek` or `openai` is needed for real assistant answers.
 - `check_llm_stack --live` sends one minimal real chat request. Use it when validating production LLM credentials.
 
+## Model Management
+
+- Admin users can open `Model Management` in the left navigation to manage chat model providers.
+- Supported presets include DeepSeek and 通义千问 Qwen. Custom providers are supported when they expose an OpenAI-compatible `/chat/completions` API.
+- When no database provider is active, the backend falls back to `.env` settings such as `DEFAULT_LLM_PROVIDER`, `DEFAULT_LLM_MODEL`, and `DEEPSEEK_API_KEY`.
+- A real provider must have `Base URL`, `Model`, and `API Key` before it can be activated. Use `Test` before `Activate` to verify credentials and network access.
+- Qwen's OpenAI-compatible DashScope endpoint is `https://dashscope.aliyuncs.com/compatible-mode/v1`; the default model preset is `qwen-plus`.
+
+## Knowledge Permissions And Chat Archives
+
+- Knowledge-base roles are intentionally limited to `owner`, `write`, `read`, and `none`.
+- `owner` can manage settings, permissions, and all data sources. `write` can maintain data sources and archive chats. `read` can view and chat only.
+- Open knowledge bases are readable by all signed-in users. They still require `owner` or explicit `write` permission for uploads, edits, deletes, reprocessing, or chat archiving.
+- Owners can manage permissions from the knowledge-base detail page. Users are selected from a system-user dropdown instead of free-form external emails.
+- Chat detail pages can archive a conversation as a `chat_archive` data source. The archive flow supports preview first, then creates a visible data source that can be deleted or reprocessed from the data-source list.
+
 ## Authentication Notes
 
 - The SPA uses DRF token authentication, not Django session authentication.
 - Login and registration must work without a CSRF cookie when called from `http://localhost:3000`.
 - Run `.\env\Scripts\python.exe manage.py smoke_auth_flow` after changing auth, CORS, CSRF, or frontend proxy settings.
+- Run `.\env\Scripts\python.exe manage.py ensure_dev_admin --allow-default-password` after rebuilding the local database to restore the diagnostic admin account.
 - If a stale backend keeps returning old behavior, stop duplicate runserver processes before restarting:
 
 ```powershell

@@ -17,6 +17,7 @@ from .serializers import (
     LoginSerializer,
     TeamMemberSerializer,
     TeamSerializer,
+    UserOptionSerializer,
     UserProfileSerializer,
     UserSerializer,
 )
@@ -34,7 +35,7 @@ class UserViewSet(viewsets.ModelViewSet):
         """Return action-specific permissions for account operations."""
         if self.action in ['create', 'login']:
             permission_classes = [permissions.AllowAny]
-        elif self.action in ['me', 'change_password', 'logout']:
+        elif self.action in ['me', 'change_password', 'logout', 'search']:
             permission_classes = [permissions.IsAuthenticated]
         else:
             permission_classes = [permissions.IsAdminUser]
@@ -100,6 +101,22 @@ class UserViewSet(viewsets.ModelViewSet):
 
         logger.info('user_password_change_rejected user_id=%s errors=%s', request.user.id, serializer.errors)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['get'])
+    def search(self, request):
+        """Search active local users for permission assignment dropdowns."""
+        query = request.query_params.get('q', '').strip()
+        users = User.objects.filter(is_active=True).exclude(id=request.user.id)
+        if query:
+            users = users.filter(
+                models.Q(email__icontains=query)
+                | models.Q(username__icontains=query)
+                | models.Q(first_name__icontains=query)
+                | models.Q(last_name__icontains=query)
+            )
+        users = users.order_by('email')[:20]
+        logger.info('user_search user_id=%s query_length=%s result_count=%s', request.user.id, len(query), len(users))
+        return Response(UserOptionSerializer(users, many=True).data)
 
 
 class UserProfileViewSet(viewsets.ModelViewSet):

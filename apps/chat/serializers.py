@@ -76,3 +76,13 @@ class ChatMessageCreateSerializer(serializers.Serializer):
         if value != ChatMessage.RoleChoices.USER:
             raise serializers.ValidationError('Only user messages can be created through this endpoint.')
         return value
+
+
+class ChatArchiveSerializer(serializers.Serializer):
+    """Validate chat archive preview/create payloads."""
+
+    knowledge_base_id = serializers.UUIDField()
+    name = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    mode = serializers.ChoiceField(choices=[('qa', 'QA')], default='qa')
+    message_ids = serializers.ListField(child=serializers.UUIDField(), required=False, allow_empty=True)
+    preview = serializers.BooleanField(default=False)

@@ -28,12 +28,44 @@
             :value="knowledgeBase.id"
           />
         </el-select>
+        <el-button :disabled="!writableKnowledgeBases.length || messages.length === 0" @click="openArchiveDialog">
+          归档为数据源
+        </el-button>
         <el-button type="primary" @click="clearChat">
           <el-icon><Delete /></el-icon>
           清空对话
         </el-button>
       </div>
     </div>
+
+    <el-dialog v-model="archiveDialogVisible" title="归档为数据源" width="720px">
+      <el-form label-position="top">
+        <el-form-item label="目标知识库">
+          <el-select v-model="archiveForm.knowledge_base_id" placeholder="选择可写知识库" style="width: 100%">
+            <el-option
+              v-for="knowledgeBase in writableKnowledgeBases"
+              :key="knowledgeBase.id"
+              :label="knowledgeBase.name"
+              :value="knowledgeBase.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="数据源名称">
+          <el-input v-model="archiveForm.name" placeholder="例如：对话归档-会议室规则" />
+        </el-form-item>
+      </el-form>
+      <div class="archive-actions">
+        <el-button @click="previewArchive" :loading="archivePreviewing">预览归档内容</el-button>
+      </div>
+      <el-table v-if="archivePreview.length" :data="archivePreview" max-height="260" class="archive-preview">
+        <el-table-column prop="question" label="问题" min-width="220" show-overflow-tooltip />
+        <el-table-column prop="answer" label="答案" min-width="280" show-overflow-tooltip />
+      </el-table>
+      <template #footer>
+        <el-button @click="archiveDialogVisible = false">取消</el-button>
+        <el-button type="primary" :disabled="archivePreview.length === 0" :loading="archiving" @click="createArchive">确认归档</el-button>
+      </template>
+    </el-dialog>
 
     <div class="chat-container">
       <div class="chat-messages" ref="messagesContainer">
@@ -136,6 +168,7 @@ const chatId = route.params.id as string
 interface KnowledgeBaseOption {
   id: string
   name: string
+  can_write?: boolean
 }
 
 interface ChatSessionDto {
@@ -163,8 +196,17 @@ const newMessage = ref('')
 const sending = ref(false)
 const isTyping = ref(false)
 const messagesContainer = ref<HTMLElement | null>(null)
+const archiveDialogVisible = ref(false)
+const archivePreviewing = ref(false)
+const archiving = ref(false)
+const archivePreview = ref<Array<{ question: string; answer: string }>>([])
+const archiveForm = ref({
+  knowledge_base_id: '',
+  name: ''
+})
 
 const userAvatar = computed(() => authStore.user?.avatar)
+const writableKnowledgeBases = computed(() => knowledgeBases.value.filter((knowledgeBase) => knowledgeBase.can_write))
 
 const formatTime = (time: string) => {
   if (!time) return ''
@@ -177,6 +219,58 @@ const loadKnowledgeBases = async () => {
     knowledgeBases.value = response.data.results || response.data
   } catch (error) {
     ElMessage.error(getApiErrorMessage(error, '加载知识库列表失败'))
+  }
+}
+
+const openArchiveDialog = () => {
+  const currentWritable = writableKnowledgeBases.value.find((knowledgeBase) => knowledgeBase.id === selectedKnowledgeBaseId.value)
+  archiveForm.value = {
+    knowledge_base_id: currentWritable?.id || writableKnowledgeBases.value[0]?.id || '',
+    name: `对话归档-${new Date().toLocaleDateString()}`
+  }
+  archivePreview.value = []
+  archiveDialogVisible.value = true
+}
+
+const previewArchive = async () => {
+  if (!archiveForm.value.knowledge_base_id) {
+    ElMessage.error('请选择目标知识库')
+    return
+  }
+  archivePreviewing.value = true
+  try {
+    const response = await api.post(`/chat/sessions/${chatId}/archive/`, {
+      ...archiveForm.value,
+      preview: true
+    })
+    archivePreview.value = response.data.items || []
+    if (archivePreview.value.length === 0) {
+      ElMessage.warning('当前对话没有可归档的问答对')
+    }
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '预览归档失败'))
+  } finally {
+    archivePreviewing.value = false
+  }
+}
+
+const createArchive = async () => {
+  if (!archiveForm.value.knowledge_base_id) {
+    ElMessage.error('请选择目标知识库')
+    return
+  }
+  archiving.value = true
+  try {
+    await api.post(`/chat/sessions/${chatId}/archive/`, {
+      ...archiveForm.value,
+      preview: false
+    })
+    ElMessage.success('对话已归档为数据源，正在向量化')
+    archiveDialogVisible.value = false
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '归档失败'))
+  } finally {
+    archiving.value = false
   }
 }
 
@@ -363,6 +457,16 @@ onMounted(() => {
   max-width: 1200px;
   margin: 0 auto;
   width: 100%;
+}
+
+.archive-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+
+.archive-preview {
+  margin-top: 8px;
 }
 
 .chat-messages {

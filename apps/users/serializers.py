@@ -56,6 +56,21 @@ class UserSerializer(serializers.ModelSerializer):
         return super().update(instance, validated_data)
 
 
+class UserOptionSerializer(serializers.ModelSerializer):
+    """Serialize compact user options for permission pickers."""
+
+    label = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = ['id', 'email', 'username', 'label']
+        read_only_fields = fields
+
+    def get_label(self, obj):
+        """Return a readable dropdown label."""
+        return f'{obj.username} <{obj.email}>' if obj.username else obj.email
+
+
 class UserProfileSerializer(serializers.ModelSerializer):
     """Serialize extended profile metadata for the current user."""
 

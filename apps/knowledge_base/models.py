@@ -74,7 +74,6 @@ class KnowledgeBaseShare(BaseModel):
     class PermissionChoices(models.TextChoices):
         READ = 'read', '只读'
         WRITE = 'write', '读写'
-        ADMIN = 'admin', '管理'
     
     permission = models.CharField(
         max_length=20,

@@ -5,7 +5,6 @@ import time
 
 from django.conf import settings
 from django.db import connection
-from django.db import models
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -15,6 +14,7 @@ from rest_framework.response import Response
 from apps.chat.models import ChatSession
 from apps.document.models import Document
 from apps.knowledge_base.models import KnowledgeBase
+from apps.knowledge_base.permissions import filter_visible
 from apps.users.models import User
 
 logger = logging.getLogger(__name__)
@@ -50,10 +50,7 @@ def health_check(request):
 def dashboard_summary(request):
     """Return summary counters for the authenticated user's dashboard."""
     started_at = time.perf_counter()
-    visible_knowledge_bases = KnowledgeBase.objects.filter(
-        models.Q(created_by=request.user) | models.Q(shares__shared_with=request.user),
-        is_deleted=False,
-    ).distinct()
+    visible_knowledge_bases = filter_visible(KnowledgeBase.objects.filter(is_deleted=False), request.user)
     knowledge_base_ids = visible_knowledge_bases.values_list('id', flat=True)
     payload = {
         'knowledge_base_count': visible_knowledge_bases.count(),

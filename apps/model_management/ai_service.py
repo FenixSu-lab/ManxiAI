@@ -206,6 +206,11 @@ class AIServiceFactory:
     @staticmethod
     def get_service(provider: str | None = None) -> BaseLLMService:
         """Return the configured LLM service instance."""
+        if provider is None:
+            database_service = AIServiceFactory._get_active_database_service()
+            if database_service:
+                return database_service
+
         provider_name = (provider or getattr(settings, 'DEFAULT_LLM_PROVIDER', 'deepseek')).strip().lower()
         if provider_name == 'debug':
             return DebugLLMService()
@@ -229,5 +234,42 @@ class AIServiceFactory:
             )
         raise ValueError(f'Unsupported LLM provider: {provider_name}')
 
+    @staticmethod
+    def get_service_from_provider(provider_obj) -> BaseLLMService:
+        """Build a service from an LLMProvider model instance."""
+        provider_type = provider_obj.provider_type.strip().lower()
+        if provider_type == 'debug':
+            return DebugLLMService()
+        return OpenAICompatibleLLMService(
+            LLMProviderConfig(
+                name=provider_type,
+                api_key=provider_obj.api_key,
+                base_url=AIServiceFactory._normalize_base_url(provider_obj.base_url),
+                model=provider_obj.model,
+                timeout=provider_obj.timeout,
+            )
+        )
 
-ai_service = AIServiceFactory.get_service()
+    @staticmethod
+    def _get_active_database_service() -> BaseLLMService | None:
+        """Return the active DB-backed provider service when model management is configured."""
+        try:
+            from .models import LLMProvider
+
+            provider_obj = LLMProvider.objects.filter(is_active=True, is_enabled=True).first()
+        except Exception as exc:
+            logger.warning('llm_database_provider_lookup_failed error=%s', exc)
+            return None
+        if not provider_obj:
+            return None
+        logger.info('llm_database_provider_selected provider_id=%s model=%s', provider_obj.id, provider_obj.model)
+        return AIServiceFactory.get_service_from_provider(provider_obj)
+
+    @staticmethod
+    def _normalize_base_url(base_url: str) -> str:
+        """Ensure an OpenAI-compatible base URL points at a `/v1` root."""
+        stripped = base_url.rstrip('/')
+        if stripped.endswith('/v1'):
+            return stripped
+        return f'{stripped}/v1'
+

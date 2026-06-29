@@ -29,6 +29,10 @@ export const getApiErrorMessage = (error: any, fallback: string) => {
     'qa_pairs',
     'question',
     'answer',
+    'base_url',
+    'api_key',
+    'model',
+    'provider_type',
     'hit_handling_method',
     'directly_return_similarity',
     'non_field_errors'

@@ -14,6 +14,7 @@ class DocumentType(models.TextChoices):
     BASE = 'base', '通用类型'
     WEB = 'web', 'Web站点'
     QA = 'qa', '问答对'
+    CHAT_ARCHIVE = 'chat_archive', '对话归档'
     TABLE = 'table', '表格'
     MARKDOWN = 'markdown', 'Markdown'
     TEXT = 'text', '纯文本'

@@ -6,6 +6,7 @@ from django.test import SimpleTestCase
 from apps.core.management.commands.check_db_latency import Command as CheckDBLatencyCommand
 from apps.core.management.commands.check_embedding_endpoint import Command as CheckEmbeddingEndpointCommand
 from apps.core.management.commands.check_llm_stack import Command as CheckLLMStackCommand
+from apps.core.management.commands.ensure_dev_admin import Command as EnsureDevAdminCommand
 from apps.model_management.ai_service import LLMProviderConfig, OpenAICompatibleLLMService
 
 
@@ -111,3 +112,20 @@ class CheckEmbeddingEndpointCommandTests(SimpleTestCase):
 
         with self.assertRaises(CommandError):
             command._extract_vector({'items': []}, 'http://127.0.0.1:8884/v1/embeddings')
+
+
+class EnsureDevAdminCommandTests(SimpleTestCase):
+    """Verify safety checks for local admin bootstrapping."""
+
+    def test_default_password_rejected_when_debug_false(self):
+        """The built-in development password should not be allowed in production mode."""
+        command = EnsureDevAdminCommand()
+
+        with self.settings(DEBUG=False):
+            with self.assertRaises(CommandError):
+                command._validate_inputs(
+                    email='admin@example.com',
+                    username='admin',
+                    password=command.DEFAULT_PASSWORD,
+                    allow_default_password=False,
+                )

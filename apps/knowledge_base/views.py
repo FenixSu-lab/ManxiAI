@@ -9,6 +9,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from .models import KnowledgeBase, KnowledgeBaseSettings, KnowledgeBaseShare, KnowledgeBaseTag
+from .permissions import filter_visible, require_owner
 from .serializers import (
     KnowledgeBaseCreateSerializer,
     KnowledgeBaseListSerializer,
@@ -31,10 +32,7 @@ class KnowledgeBaseViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         """Return knowledge bases owned by or shared with the current user."""
-        user = self.request.user
-        return self.queryset.filter(
-            models.Q(created_by=user) | models.Q(shares__shared_with=user)
-        ).distinct()
+        return filter_visible(self.queryset, self.request.user)
 
     def get_serializer_class(self):
         """Select a serializer for list/create/detail operations."""
@@ -65,15 +63,30 @@ class KnowledgeBaseViewSet(viewsets.ModelViewSet):
 
     def perform_destroy(self, instance):
         """Soft-delete a knowledge base."""
+        require_owner(self.request.user, instance, 'delete_knowledge_base')
         instance.soft_delete()
         logger.info('knowledge_base_deleted user_id=%s knowledge_base_id=%s', self.request.user.id, instance.id)
+
+    def perform_update(self, serializer):
+        """Update core knowledge-base settings only when the user is the owner."""
+        require_owner(self.request.user, serializer.instance, 'update_knowledge_base')
+        knowledge_base = serializer.save()
+        logger.info(
+            'knowledge_base_updated user_id=%s knowledge_base_id=%s changed_fields=%s',
+            self.request.user.id,
+            knowledge_base.id,
+            sorted(self.request.data.keys()),
+        )
 
     @action(detail=True, methods=['post'])
     def share(self, request, pk=None):
         """Share a knowledge base with another user by email."""
         knowledge_base = self.get_object()
+        require_owner(request.user, knowledge_base, 'share_knowledge_base')
         user_email = request.data.get('user_email')
         permission = request.data.get('permission', 'read')
+        if permission not in {'read', 'write'}:
+            return Response({'permission': 'permission must be read or write'}, status=status.HTTP_400_BAD_REQUEST)
 
         if not user_email:
             return Response({'error': 'user_email is required'}, status=status.HTTP_400_BAD_REQUEST)
@@ -105,6 +118,7 @@ class KnowledgeBaseViewSet(viewsets.ModelViewSet):
     def unshare(self, request, pk=None):
         """Remove sharing for a user email."""
         knowledge_base = self.get_object()
+        require_owner(request.user, knowledge_base, 'unshare_knowledge_base')
         user_email = request.data.get('user_email')
         if not user_email:
             return Response({'error': 'user_email is required'}, status=status.HTTP_400_BAD_REQUEST)
@@ -128,6 +142,7 @@ class KnowledgeBaseViewSet(viewsets.ModelViewSet):
     def shares(self, request, pk=None):
         """List sharing records for a knowledge base."""
         knowledge_base = self.get_object()
+        require_owner(request.user, knowledge_base, 'list_knowledge_base_shares')
         shares = KnowledgeBaseShare.objects.filter(knowledge_base=knowledge_base).select_related('shared_with')
         return Response(KnowledgeBaseShareSerializer(shares, many=True).data)
 
@@ -135,6 +150,7 @@ class KnowledgeBaseViewSet(viewsets.ModelViewSet):
     def add_tag(self, request, pk=None):
         """Add a tag to a knowledge base."""
         knowledge_base = self.get_object()
+        require_owner(request.user, knowledge_base, 'add_knowledge_base_tag')
         tag_name = request.data.get('name')
         tag_color = request.data.get('color', '#1890ff')
         if not tag_name:
@@ -153,6 +169,7 @@ class KnowledgeBaseViewSet(viewsets.ModelViewSet):
     def remove_tag(self, request, pk=None):
         """Remove a tag from a knowledge base."""
         knowledge_base = self.get_object()
+        require_owner(request.user, knowledge_base, 'remove_knowledge_base_tag')
         tag_name = request.data.get('name')
         if not tag_name:
             return Response({'error': 'name is required'}, status=status.HTTP_400_BAD_REQUEST)
@@ -166,6 +183,8 @@ class KnowledgeBaseViewSet(viewsets.ModelViewSet):
     def kb_settings(self, request, pk=None):
         """Get or update retrieval settings for a knowledge base."""
         knowledge_base = self.get_object()
+        if request.method != 'GET':
+            require_owner(request.user, knowledge_base, 'update_knowledge_base_settings')
         settings_obj, _ = KnowledgeBaseSettings.objects.get_or_create(knowledge_base=knowledge_base)
 
         if request.method == 'GET':
@@ -189,12 +208,12 @@ class KnowledgeBaseViewSet(viewsets.ModelViewSet):
     def public(self, request):
         """List public knowledge bases."""
         public_kbs = KnowledgeBase.objects.filter(is_public=True, is_deleted=False)
-        serializer = KnowledgeBaseListSerializer(public_kbs, many=True)
+        serializer = KnowledgeBaseListSerializer(public_kbs, many=True, context=self.get_serializer_context())
         return Response(serializer.data)
 
     @action(detail=False, methods=['get'])
     def shared_with_me(self, request):
         """List knowledge bases shared with the current user."""
         shared_kbs = KnowledgeBase.objects.filter(shares__shared_with=request.user, is_deleted=False).distinct()
-        serializer = KnowledgeBaseListSerializer(shared_kbs, many=True)
+        serializer = KnowledgeBaseListSerializer(shared_kbs, many=True, context=self.get_serializer_context())
         return Response(serializer.data)

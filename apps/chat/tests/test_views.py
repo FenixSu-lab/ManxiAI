@@ -7,7 +7,8 @@ from rest_framework.test import APIRequestFactory, force_authenticate
 
 from apps.chat.models import ChatMessage, ChatSession
 from apps.chat.views import ChatSessionViewSet
-from apps.knowledge_base.models import KnowledgeBase
+from apps.document.models import Document, DocumentType, Paragraph, ProblemParagraphMapping
+from apps.knowledge_base.models import KnowledgeBase, KnowledgeBaseShare
 from apps.users.models import User
 
 
@@ -124,3 +125,66 @@ class ChatSessionViewSetTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn('content', response.data)
         mock_generate.assert_not_called()
+
+    def test_archive_preview_returns_pairs_without_creating_document(self):
+        """Archive preview should show generated QA items without writing a data source."""
+        session = ChatSession.objects.create(user=self.user, title='Archive chat', knowledge_base=self.knowledge_base)
+        ChatMessage.objects.create(session=session, role=ChatMessage.RoleChoices.USER, content='What is A?')
+        ChatMessage.objects.create(session=session, role=ChatMessage.RoleChoices.ASSISTANT, content='A is alpha.')
+        view = ChatSessionViewSet.as_view({'post': 'archive'})
+        request = self.factory.post(
+            f'/api/v1/chat/sessions/{session.id}/archive/',
+            {'knowledge_base_id': str(self.knowledge_base.id), 'preview': True},
+            format='json',
+        )
+        force_authenticate(request, user=self.user)
+
+        response = view(request, pk=session.id)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['estimated_count'], 1)
+        self.assertEqual(Document.objects.count(), 0)
+
+    @patch('apps.chat.services.EmbeddingService.embed_paragraphs_async')
+    def test_archive_creates_managed_chat_archive_document(self, mock_embed):
+        """Archiving a chat should create a visible data source that can be managed."""
+        session = ChatSession.objects.create(user=self.user, title='Archive chat', knowledge_base=self.knowledge_base)
+        ChatMessage.objects.create(session=session, role=ChatMessage.RoleChoices.USER, content='What is A?')
+        ChatMessage.objects.create(session=session, role=ChatMessage.RoleChoices.ASSISTANT, content='A is alpha.')
+        view = ChatSessionViewSet.as_view({'post': 'archive'})
+        request = self.factory.post(
+            f'/api/v1/chat/sessions/{session.id}/archive/',
+            {'knowledge_base_id': str(self.knowledge_base.id), 'name': 'Archived Chat'},
+            format='json',
+        )
+        force_authenticate(request, user=self.user)
+
+        response = view(request, pk=session.id)
+
+        self.assertEqual(response.status_code, 201)
+        document = Document.objects.get(id=response.data['document_id'])
+        self.assertEqual(document.type, DocumentType.CHAT_ARCHIVE)
+        self.assertEqual(document.name, 'Archived Chat')
+        self.assertEqual(document.meta['source'], 'chat_archive')
+        self.assertEqual(Paragraph.objects.filter(document=document).count(), 1)
+        self.assertEqual(ProblemParagraphMapping.objects.filter(document=document).count(), 1)
+        mock_embed.assert_called_once_with(document)
+
+    def test_read_share_cannot_archive_chat_to_knowledge_base(self):
+        """Read users can chat with shared knowledge but cannot archive new data sources."""
+        reader = User.objects.create_user(email='chat-reader@example.com', username='chat-reader', password='secret123')
+        KnowledgeBaseShare.objects.create(knowledge_base=self.knowledge_base, shared_with=reader, permission='read')
+        session = ChatSession.objects.create(user=reader, title='Reader chat', knowledge_base=self.knowledge_base)
+        ChatMessage.objects.create(session=session, role=ChatMessage.RoleChoices.USER, content='What is A?')
+        ChatMessage.objects.create(session=session, role=ChatMessage.RoleChoices.ASSISTANT, content='A is alpha.')
+        view = ChatSessionViewSet.as_view({'post': 'archive'})
+        request = self.factory.post(
+            f'/api/v1/chat/sessions/{session.id}/archive/',
+            {'knowledge_base_id': str(self.knowledge_base.id), 'name': 'Denied Archive'},
+            format='json',
+        )
+        force_authenticate(request, user=reader)
+
+        response = view(request, pk=session.id)
+
+        self.assertEqual(response.status_code, 403)

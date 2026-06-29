@@ -57,6 +57,16 @@ Apply migrations:
 .\env\Scripts\python.exe manage.py migrate
 ```
 
+For local diagnostics only, create or reset a known administrator:
+
+```powershell
+.\env\Scripts\python.exe manage.py ensure_dev_admin --allow-default-password
+```
+
+This creates `admin@example.com` / `Admin123!`. For non-local environments,
+pass a real password with `--password` and do not use the default development
+password.
+
 Verify:
 
 ```powershell

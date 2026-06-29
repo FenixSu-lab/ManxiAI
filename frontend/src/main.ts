@@ -6,6 +6,7 @@ import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router'
 import { useAuthStore } from '@/stores/auth'
+import { installRuntimeTranslator } from '@/utils/i18n'
 
 import 'element-plus/dist/index.css'
 import './styles/index.scss'
@@ -26,3 +27,4 @@ const authStore = useAuthStore()
 void authStore.initialize()
 
 app.mount('#app')
+installRuntimeTranslator()

@@ -21,4 +21,7 @@ urlpatterns = [
         'post': 'messages',
         'delete': 'messages',
     }), name='chat-session-messages'),
+    path('chat/sessions/<uuid:pk>/archive/', ChatSessionViewSet.as_view({
+        'post': 'archive',
+    }), name='chat-session-archive'),
 ]
